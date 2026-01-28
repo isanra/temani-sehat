@@ -3,6 +3,7 @@
 	import { fade, slide, scale } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { userStore } from '$lib/stores/userStore.svelte.js';
+	import { API_BASE_URL } from '$lib/utils/api';
 
 	import Header from '$lib/components/Header.svelte';
 	import Navbar from '$lib/components/Navbar.svelte';
@@ -13,31 +14,26 @@
 	// --- STATE ---
 	let searchQuery = $state('');
 	let isChatting = $state(false);
+	let isLoading = $state(false);
 
 	// DATA
 	let experts = $state([]);
 	let selectedExpert = $state(null);
+	let activeConsultationId = $state(null); // ID konsultasi aktif dari backend
 
 	// STATE FILTER
-	let activeCategory = $state('Semua'); // Default: Tampilkan Semua
+	let activeCategory = $state('Semua');
 
-	// LOGIC FILTERING (Reactive)
-	// List dokter akan berubah otomatis saat 'activeCategory' atau 'searchQuery' berubah
+	// LOGIC FILTERING
 	let filteredExperts = $derived(
 		experts.filter((expert) => {
-			// 1. Filter Kategori
 			const matchCategory = activeCategory === 'Semua' || expert.role === activeCategory;
-			// 2. Filter Search (Nama atau Role)
 			const matchSearch =
 				expert.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
 				expert.role.toLowerCase().includes(searchQuery.toLowerCase());
-
 			return matchCategory && matchSearch;
 		})
 	);
-
-	// PENYIMPANAN SESI LOKAL
-	let chatSessions = $state({});
 
 	// MODALS
 	let showBookingModal = $state(false);
@@ -46,149 +42,213 @@
 	let bookingForm = $state({ schedule_date: '', complaint: '' });
 	let reviewForm = $state({ rating: 0, review: '' });
 
-	// CHAT INPUT
+	// CHAT
+	let messages = $state([]); // Pesan chat aktif
 	let messageInput = $state('');
 	let chatContainer;
 
-	// KATEGORI (Ditambah 'Semua' untuk Reset Filter)
+	// KATEGORI BARU
 	let categories = [
-		{ id: 'all', name: 'Semua', icon: 'fa-layer-group', color: 'bg-slate-200 text-slate-600' }, // Tambahan
+		{ id: 'all', name: 'Semua', icon: 'fa-layer-group', color: 'bg-slate-200 text-slate-600' },
 		{
-			id: 'khusus',
-			name: 'Konsultan Khusus',
-			icon: 'fa-user-tie',
+			id: 'holistic',
+			name: 'Konsultan Holistic',
+			icon: 'fa-leaf',
+			color: 'bg-green-100 text-green-600'
+		},
+		{
+			id: 'spiritual',
+			name: 'Konsultan Spiritual',
+			icon: 'fa-praying-hands',
 			color: 'bg-purple-100 text-purple-600'
 		},
 		{ id: 'dokter', name: 'Dokter', icon: 'fa-user-doctor', color: 'bg-blue-100 text-blue-600' },
-		{ id: 'gizi', name: 'Ahli Gizi', icon: 'fa-apple-whole', color: 'bg-green-100 text-green-600' },
+		{
+			id: 'gizi',
+			name: 'Ahli Gizi',
+			icon: 'fa-apple-whole',
+			color: 'bg-orange-100 text-orange-600'
+		},
 		{
 			id: 'fisio',
 			name: 'Fisio Teraphy',
 			icon: 'fa-person-walking',
-			color: 'bg-orange-100 text-orange-600'
+			color: 'bg-red-100 text-red-600'
 		},
 		{ id: 'admin', name: 'Admin', icon: 'fa-headset', color: 'bg-slate-100 text-slate-600' }
 	];
-
-	const API_BASE = 'https://nondeprecatively-overdiligent-sonja.ngrok-free.dev/api';
 
 	onMount(async () => {
 		await loadExperts();
 	});
 
-	// --- 1. LOAD EXPERTS (REAL API) ---
+	// --- 1. LOAD EXPERTS ---
 	async function loadExperts() {
+		isLoading = true;
 		const token = localStorage.getItem('auth_token');
 		if (!token) return goto('/login');
 
 		try {
-			// INI MEMANGGIL API BENERAN
-			const res = await fetch(`${API_BASE}/experts`, {
+			const res = await fetch(`${API_BASE_URL}/experts`, {
 				headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' }
 			});
 			const result = await res.json();
+
 			if (res.ok) {
 				experts = (result.data || []).map((e) => ({
 					id: e.id,
 					name: e.name,
-					// Mapping role agar cocok dengan nama kategori filter
-					role: mapRoleToCategory(e.specialization),
-					exp: e.experience || '3 Tahun',
-					isOnline: e.is_online || true
+					title: e.title || '', // Gelar
+					role: mapCategory(e.category),
+					category_raw: e.category,
+					fee: e.fee || 0,
+					wa_number: e.wa_number,
+					photo: e.photo,
+					isOnline: true // Default online dulu
 				}));
 			}
 		} catch (e) {
-			console.error('Gagal load expert (Menggunakan Dummy)', e);
-			// Fallback Dummy Data (Hanya muncul jika API Error/Mati)
-			experts = [
-				{ id: 1, name: 'Admin Support', role: 'Admin', exp: '-', isOnline: true },
-				{ id: 2, name: 'Dr. Arief Sp.PD', role: 'Dokter', exp: '10 Tahun', isOnline: true },
-				{ id: 3, name: 'Siti Aminah S.Gz', role: 'Ahli Gizi', exp: '5 Tahun', isOnline: false },
-				{ id: 4, name: 'Budi Santoso', role: 'Fisio Teraphy', exp: '7 Tahun', isOnline: true },
-				{ id: 5, name: 'Prof. Bambang', role: 'Konsultan Khusus', exp: '20 Tahun', isOnline: true }
-			];
+			console.error('Gagal load expert', e);
+		} finally {
+			isLoading = false;
 		}
 	}
 
-	// Helper: Menyamakan data API yg acak dengan Kategori UI kita
-	function mapRoleToCategory(spec) {
-		if (!spec) return 'Dokter'; // Default
-		const s = spec.toLowerCase();
-		if (s.includes('gizi')) return 'Ahli Gizi';
-		if (s.includes('fisio')) return 'Fisio Teraphy';
-		if (s.includes('admin')) return 'Admin';
-		if (s.includes('khusus') || s.includes('konsultan')) return 'Konsultan Khusus';
-		return 'Dokter';
+	function mapCategory(cat) {
+		if (!cat) return 'Dokter';
+		// Mapping string backend ke frontend category name
+		if (cat.toLowerCase().includes('holistic')) return 'Konsultan Holistic';
+		if (cat.toLowerCase().includes('spiritual')) return 'Konsultan Spiritual';
+		return cat; // Default kembalikan aslinya
 	}
 
-	// --- 2. LOGIC BUKA CHAT / BOOKING ---
-	function handleExpertClick(expert) {
+	// --- 2. BOOKING & START CHAT ---
+	async function handleExpertClick(expert) {
 		selectedExpert = expert;
-
-		if (chatSessions[expert.id]) {
-			isChatting = true;
-			scrollToBottom();
-		} else {
-			bookingForm = { schedule_date: '', complaint: '' };
-			showBookingModal = true;
-		}
+		// Cek apakah user punya sesi chat aktif dengan expert ini?
+		// Idealnya backend kasih tau status konsultasi terakhir.
+		// Untuk sekarang kita buka form booking dulu setiap klik baru.
+		bookingForm = { schedule_date: '', complaint: '' };
+		showBookingModal = true;
 	}
 
-	function confirmBooking() {
-		chatSessions[selectedExpert.id] = {
-			consultationId: `consult-${Date.now()}`,
-			messages: [
-				{
-					id: 1,
-					sender: 'expert',
-					content: `Halo, saya ${selectedExpert.name} (${selectedExpert.role}). ${bookingForm.complaint ? `Terkait "${bookingForm.complaint}", ` : ''}bagaimana saya bisa membantu?`,
-					time: 'Baru saja'
-				}
-			]
-		};
-
-		showBookingModal = false;
-		isChatting = true;
-		scrollToBottom();
-	}
-
-	// --- 3. CHAT SYSTEM ---
-	function minimizeChat() {
-		isChatting = false;
-	}
-
-	async function sendMessage() {
-		const currentSession = chatSessions[selectedExpert?.id];
-		if (!messageInput.trim() || !currentSession) return;
-
-		const newMsg = {
-			id: Date.now(),
-			sender: 'user',
-			content: messageInput,
-			time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-		};
-
-		chatSessions[selectedExpert.id].messages = [...currentSession.messages, newMsg];
-
-		const payload = { content: messageInput };
+	async function confirmBooking() {
 		const token = localStorage.getItem('auth_token');
-		messageInput = '';
-
-		scrollToBottom();
 
 		try {
-			await fetch(`${API_BASE}/consultations/${currentSession.consultationId}/messages`, {
+			// 1. POST Booking ke Backend
+			const res = await fetch(`${API_BASE_URL}/consultations`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 					Authorization: `Bearer ${token}`,
 					'ngrok-skip-browser-warning': 'true'
 				},
-				body: JSON.stringify(payload)
+				body: JSON.stringify({
+					expert_id: selectedExpert.id,
+					schedule_date: bookingForm.schedule_date || new Date().toISOString().split('T')[0], // Default hari ini
+					complaint: bookingForm.complaint
+				})
 			});
+
+			const result = await res.json();
+
+			if (res.ok) {
+				// Booking Sukses -> Masuk Chat
+				activeConsultationId = result.data.id; // Simpan ID Konsultasi
+				showBookingModal = false;
+				isChatting = true;
+
+				// Load Pesan Lama (Persistent Chat)
+				await loadMessages(activeConsultationId);
+			} else {
+				alert(result.message || 'Gagal booking konsultasi.');
+			}
 		} catch (e) {
-			console.error('Send error', e);
+			alert('Error koneksi booking.');
 		}
+	}
+
+	// --- 3. CHAT SYSTEM (Persistent) ---
+
+	async function loadMessages(consultationId) {
+		const token = localStorage.getItem('auth_token');
+		try {
+			const res = await fetch(`${API_BASE_URL}/consultations/${consultationId}/messages`, {
+				headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' }
+			});
+			const result = await res.json();
+
+			if (res.ok) {
+				// Mapping pesan dari backend
+				messages = (result.data || []).map((m) => ({
+					id: m.id,
+					sender: m.sender_type === 'user' ? 'user' : 'expert', // Sesuaikan key backend
+					content: m.content,
+					time: new Date(m.created_at).toLocaleTimeString([], {
+						hour: '2-digit',
+						minute: '2-digit'
+					})
+				}));
+
+				// Jika pesan kosong (baru mulai), tambahkan Auto Message Expert
+				if (messages.length === 0) {
+					const waLink = `https://wa.me/${selectedExpert.wa_number}`;
+					messages = [
+						{
+							id: 'welcome',
+							sender: 'expert',
+							content: `Halo, saya ${selectedExpert.name}. Silakan hubungi saya via WhatsApp untuk konsultasi lebih lanjut: ${selectedExpert.wa_number}`,
+							isLink: true,
+							link: waLink,
+							time: 'Sekarang'
+						}
+					];
+				}
+			}
+		} catch (e) {
+			console.error('Gagal load chat', e);
+		}
+		await scrollToBottom();
+	}
+
+	async function sendMessage() {
+		if (!messageInput.trim()) return;
+
+		// Optimistic UI Update (Langsung tampil di layar)
+		const tempMsg = {
+			id: Date.now(),
+			sender: 'user',
+			content: messageInput,
+			time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+		};
+		messages = [...messages, tempMsg];
+		const msgToSend = messageInput;
+		messageInput = '';
+		await scrollToBottom();
+
+		// Kirim ke Backend
+		const token = localStorage.getItem('auth_token');
+		try {
+			await fetch(`${API_BASE_URL}/consultations/${activeConsultationId}/messages`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${token}`,
+					'ngrok-skip-browser-warning': 'true'
+				},
+				body: JSON.stringify({ content: msgToSend })
+			});
+			// Tidak perlu reloadMessages agar smooth, kecuali mau sync status
+		} catch (e) {
+			console.error('Gagal kirim pesan', e);
+		}
+	}
+
+	function minimizeChat() {
+		isChatting = false;
+		selectedExpert = null;
+		messages = [];
 	}
 
 	async function scrollToBottom() {
@@ -197,18 +257,10 @@
 	}
 
 	// --- 4. REVIEW SYSTEM ---
-	function openReviewModal() {
-		reviewForm = { rating: 0, review: '' };
-		showReviewModal = true;
-	}
-
 	async function submitReview() {
-		const currentSession = chatSessions[selectedExpert?.id];
-		if (!currentSession) return;
-
 		const token = localStorage.getItem('auth_token');
 		try {
-			await fetch(`${API_BASE}/consultations/${currentSession.consultationId}/review`, {
+			await fetch(`${API_BASE_URL}/consultations/${activeConsultationId}/review`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
@@ -217,13 +269,27 @@
 				},
 				body: JSON.stringify(reviewForm)
 			});
-
 			alert('Terima kasih ulasannya!');
 			showReviewModal = false;
 		} catch (e) {
-			console.error(e);
 			alert('Gagal kirim review.');
 		}
+	}
+
+	// --- HELPERS ---
+	function resolveImage(url) {
+		if (!url) return null;
+		if (url.startsWith('http')) return url;
+		const baseUrl = API_BASE_URL.replace('/api', '');
+		return `${baseUrl}/storage/${url}`;
+	}
+
+	function formatRupiah(num) {
+		return new Intl.NumberFormat('id-ID', {
+			style: 'currency',
+			currency: 'IDR',
+			minimumFractionDigits: 0
+		}).format(num);
 	}
 </script>
 
@@ -256,16 +322,17 @@
 								: 'opacity-70 hover:scale-105 hover:opacity-100'}"
 						>
 							<div
-								class="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl shadow-sm transition-all
-                                {activeCategory === cat.name
+								class="flex h-16 w-16 items-center justify-center rounded-2xl text-2xl shadow-sm transition-all {activeCategory ===
+								cat.name
 									? 'bg-cyan-500 text-white shadow-md shadow-cyan-200'
 									: `${cat.color}`}"
 							>
 								<i class="fa-solid {cat.icon}"></i>
 							</div>
 							<span
-								class="text-center text-[10px] leading-tight font-bold
-                                {activeCategory === cat.name ? 'text-cyan-600' : 'text-slate-500'}"
+								class="text-center text-[10px] leading-tight font-bold {activeCategory === cat.name
+									? 'text-cyan-600'
+									: 'text-slate-500'}"
 							>
 								{cat.name}
 							</span>
@@ -282,7 +349,7 @@
 					<span class="text-xs font-bold text-slate-400">{filteredExperts.length} Tersedia</span>
 				</div>
 
-				{#if experts.length === 0}
+				{#if isLoading}
 					<div class="animate-pulse py-10 text-center text-slate-400">Sedang memuat data...</div>
 				{:else if filteredExperts.length === 0}
 					<div
@@ -300,50 +367,48 @@
 						{#each filteredExperts as expert (expert.id)}
 							<div in:slide|local>
 								<Card
-									onclick={() => handleExpertClick(expert)}
-									className="group flex cursor-pointer items-center gap-4 border-slate-100 p-4 transition-all hover:border-cyan-200 hover:shadow-md"
+									className="group flex items-center gap-4 border-slate-100 p-4 transition-all hover:border-cyan-200 hover:shadow-md relative overflow-hidden"
 								>
 									<div class="relative h-16 w-16 shrink-0">
-										<div
-											class="flex h-full w-full items-center justify-center rounded-full bg-slate-100 text-3xl"
-										>
-											{#if expert.role === 'Admin'}🎧{:else if expert.role === 'Ahli Gizi'}🍎{:else if expert.role === 'Fisio Teraphy'}🧘{:else}👨‍⚕️{/if}
-										</div>
-										{#if expert.isOnline}
+										{#if expert.photo}
+											<img
+												src={resolveImage(expert.photo)}
+												alt={expert.name}
+												class="h-full w-full rounded-full object-cover shadow-sm"
+											/>
+										{:else}
 											<div
-												class="absolute right-0 bottom-0 h-4 w-4 animate-pulse rounded-full border-2 border-white bg-green-500"
-											></div>
-										{/if}
-									</div>
-
-									<div class="flex-1">
-										<h4 class="font-bold text-slate-800">{expert.name}</h4>
-										{#if chatSessions[expert.id]}
-											<div class="mb-1 flex items-center gap-1">
-												<span class="h-2 w-2 animate-pulse rounded-full bg-green-500"></span>
-												<span class="text-[10px] font-bold text-green-600">Sesi Aktif</span>
+												class="flex h-full w-full items-center justify-center rounded-full bg-slate-100 text-3xl"
+											>
+												👨‍⚕️
 											</div>
 										{/if}
-										<p class="mb-2 text-xs font-bold text-cyan-600">{expert.role}</p>
-										<div class="flex items-center gap-3 text-[10px] font-bold text-slate-400">
-											<span class="flex items-center gap-1 rounded bg-slate-50 px-2 py-1"
-												><i class="fa-solid fa-briefcase"></i> {expert.exp}</span
-											>
-											<span class="flex items-center gap-1 rounded bg-slate-50 px-2 py-1"
-												><i class="fa-solid fa-star text-orange-400"></i> 4.9</span
-											>
-										</div>
+										<div
+											class="absolute right-0 bottom-0 h-4 w-4 rounded-full border-2 border-white bg-green-500"
+										></div>
 									</div>
 
-									<button
-										class="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-50 text-cyan-600 transition-all group-hover:bg-cyan-500 group-hover:text-white group-hover:shadow-lg group-hover:shadow-cyan-200"
-									>
-										{#if chatSessions[expert.id]}
-											<i class="fa-solid fa-comments"></i>
-										{:else}
-											<i class="fa-solid fa-plus"></i>
+									<div class="min-w-0 flex-1">
+										<h4 class="truncate font-bold text-slate-800">{expert.name}</h4>
+										{#if expert.title}
+											<p class="mb-1 text-[10px] font-bold tracking-wide text-slate-400 uppercase">
+												{expert.title}
+											</p>
 										{/if}
-									</button>
+										<p class="text-xs font-bold text-cyan-600">{expert.role}</p>
+									</div>
+
+									<div class="flex flex-col items-end gap-2">
+										<span class="text-sm font-extrabold text-slate-800"
+											>{formatRupiah(expert.fee)}</span
+										>
+										<button
+											onclick={() => handleExpertClick(expert)}
+											class="rounded-lg bg-cyan-50 px-4 py-2 text-xs font-bold text-cyan-600 transition hover:bg-cyan-500 hover:text-white"
+										>
+											Chat <i class="fa-solid fa-comment-dots ml-1"></i>
+										</button>
+									</div>
 								</Card>
 							</div>
 						{/each}
@@ -368,16 +433,14 @@
 				>
 					<i class="fa-solid fa-arrow-left text-lg"></i>
 				</button>
-
 				<div class="flex flex-col items-center">
 					<h4 class="text-sm font-bold text-slate-800">{selectedExpert.name}</h4>
 					<span class="rounded-full bg-green-50 px-2 text-[10px] font-bold text-green-500"
 						>● Online</span
 					>
 				</div>
-
 				<button
-					onclick={openReviewModal}
+					onclick={() => (showReviewModal = true)}
 					class="flex items-center gap-1 rounded-full border border-orange-100 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-500 shadow-sm transition hover:bg-orange-100"
 				>
 					<i class="fa-solid fa-star"></i> Nilai
@@ -388,46 +451,50 @@
 				<div
 					class="mx-auto my-4 w-fit rounded-full bg-slate-100 px-3 py-1 text-center text-xs text-slate-400"
 				>
-					Mulai Sesi dengan {selectedExpert.role}
+					Sesi Konsultasi Dimulai
 				</div>
 
-				{#if chatSessions[selectedExpert.id]}
-					{#each chatSessions[selectedExpert.id].messages as msg}
-						<div class="flex w-full {msg.sender === 'user' ? 'justify-end' : 'justify-start'}">
-							<div
-								class="max-w-[80%] rounded-2xl px-4 py-3 text-sm shadow-sm
-                                {msg.sender === 'user'
-									? 'rounded-tr-none bg-cyan-500 text-white shadow-cyan-100'
-									: 'rounded-tl-none border border-slate-100 bg-white text-slate-700'}"
-							>
-								<p class="leading-relaxed">{msg.content}</p>
-								<span
-									class="mt-1 block text-[9px] opacity-70 {msg.sender === 'user'
-										? 'text-cyan-100'
-										: 'text-slate-400'} text-right"
+				{#each messages as msg}
+					<div class="flex w-full {msg.sender === 'user' ? 'justify-end' : 'justify-start'}">
+						<div
+							class="max-w-[85%] rounded-2xl px-4 py-3 text-sm shadow-sm {msg.sender === 'user'
+								? 'rounded-tr-none bg-cyan-500 text-white shadow-cyan-100'
+								: 'rounded-tl-none border border-slate-100 bg-white text-slate-700'}"
+						>
+							<p class="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+
+							{#if msg.isLink}
+								<a
+									href={msg.link}
+									target="_blank"
+									class="mt-2 block w-full rounded-lg bg-green-100 px-3 py-2 text-center text-xs font-bold text-green-700 hover:bg-green-200"
 								>
-									{msg.time}
-								</span>
-							</div>
+									<i class="fa-brands fa-whatsapp mr-1"></i> Hubungi via WA
+								</a>
+							{/if}
+
+							<span
+								class="mt-1 block text-[9px] opacity-70 {msg.sender === 'user'
+									? 'text-cyan-100'
+									: 'text-slate-400'} text-right"
+							>
+								{msg.time}
+							</span>
 						</div>
-					{/each}
-				{/if}
+					</div>
+				{/each}
 			</div>
 
 			<div class="bg-white p-3 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
 				<div
 					class="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-100 px-2 py-2 transition-all focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-50"
 				>
-					<button
-						class="h-10 w-10 rounded-full text-slate-400 transition hover:bg-slate-200 hover:text-cyan-600"
-						><i class="fa-solid fa-paperclip"></i></button
-					>
 					<input
 						bind:value={messageInput}
 						onkeydown={(e) => e.key === 'Enter' && sendMessage()}
 						type="text"
 						placeholder="Ketik pesan..."
-						class="flex-1 bg-transparent px-2 text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
+						class="flex-1 bg-transparent px-4 text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400"
 					/>
 					<button
 						onclick={sendMessage}
@@ -451,21 +518,32 @@
 			class="absolute inset-0 bg-black/60 backdrop-blur-sm"
 			onclick={() => (showBookingModal = false)}
 		></div>
-
 		<div
 			class="relative z-10 w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
 			in:slide={{ duration: 300, axis: 'y' }}
 		>
 			<div class="mb-6 flex items-center justify-between">
-				<h3 class="text-xl font-bold text-slate-800">Mulai Konsultasi</h3>
+				<h3 class="text-xl font-bold text-slate-800">Booking Konsultasi</h3>
 				<button onclick={() => (showBookingModal = false)} class="text-slate-400 hover:text-red-500"
 					><i class="fa-solid fa-xmark text-xl"></i></button
 				>
 			</div>
 
 			<div class="mb-6 flex items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-				<div class="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-100 text-2xl">
-					{#if selectedExpert?.role === 'Admin'}🎧{:else if selectedExpert?.role === 'Ahli Gizi'}🍎{:else}👨‍⚕️{/if}
+				<div class="relative h-12 w-12 shrink-0">
+					{#if selectedExpert?.photo}
+						<img
+							src={resolveImage(selectedExpert.photo)}
+							alt="avatar"
+							class="h-full w-full rounded-full object-cover"
+						/>
+					{:else}
+						<div
+							class="flex h-full w-full items-center justify-center rounded-full bg-cyan-100 text-xl"
+						>
+							👨‍⚕️
+						</div>
+					{/if}
 				</div>
 				<div>
 					<p class="font-bold text-slate-800">{selectedExpert?.name}</p>
@@ -476,8 +554,16 @@
 			<div class="space-y-4">
 				<div>
 					<label class="mb-1 block text-xs font-bold text-slate-400 uppercase"
-						>Keluhan Utama / Topik</label
+						>Jadwal Konsultasi</label
 					>
+					<input
+						type="date"
+						bind:value={bookingForm.schedule_date}
+						class="w-full rounded-xl bg-slate-50 p-3 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-cyan-500"
+					/>
+				</div>
+				<div>
+					<label class="mb-1 block text-xs font-bold text-slate-400 uppercase">Keluhan Utama</label>
 					<textarea
 						bind:value={bookingForm.complaint}
 						rows="3"
@@ -489,7 +575,7 @@
 					onclick={confirmBooking}
 					className="w-full py-4 bg-cyan-600 text-white shadow-lg shadow-cyan-200 mt-2"
 				>
-					Mulai Chat <i class="fa-solid fa-comments ml-2"></i>
+					Buat Jadwal & Chat <i class="fa-solid fa-arrow-right ml-2"></i>
 				</Button>
 			</div>
 		</div>
@@ -505,7 +591,6 @@
 			class="absolute inset-0 bg-black/60 backdrop-blur-sm"
 			onclick={() => (showReviewModal = false)}
 		></div>
-
 		<div
 			class="relative z-10 w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-2xl"
 			in:scale
@@ -516,10 +601,6 @@
 				<i class="fa-solid fa-star"></i>
 			</div>
 			<h3 class="mb-2 text-2xl font-bold text-slate-800">Beri Ulasan</h3>
-			<p class="mb-6 text-sm text-slate-500">
-				Bagaimana pengalaman konsultasi dengan<br /><strong>{selectedExpert?.name}</strong>?
-			</p>
-
 			<div class="mb-6 flex justify-center gap-2">
 				{#each [1, 2, 3, 4, 5] as star}
 					<button
@@ -530,14 +611,12 @@
 					>
 				{/each}
 			</div>
-
 			<input
 				bind:value={reviewForm.review}
 				type="text"
 				placeholder="Tulis masukan..."
 				class="mb-6 w-full rounded-xl bg-slate-50 p-3 text-center text-sm outline-none focus:ring-2 focus:ring-orange-400"
 			/>
-
 			<div class="flex gap-3">
 				<Button onclick={() => (showReviewModal = false)} variant="secondary" className="flex-1"
 					>Nanti Saja</Button

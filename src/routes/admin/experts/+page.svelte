@@ -21,7 +21,7 @@
 		photo: null as File | null
 	};
 
-	// 1. READ: Ambil Data Experts
+	// 1. READ
 	async function loadExperts() {
 		loading = true;
 		try {
@@ -41,16 +41,15 @@
 		}
 	}
 
-	// 2. Handle File Change
+	// 2. Handle File
 	function handleFileChange(event: any) {
 		const file = event.target.files[0];
 		if (file) form.photo = file;
 	}
 
-	// 3. CREATE & UPDATE: Handle Submit
+	// 3. CREATE & UPDATE
 	async function handleSubmit() {
 		submitLoading = true;
-
 		try {
 			const formData = new FormData();
 			formData.append('name', form.name);
@@ -58,20 +57,17 @@
 			formData.append('category', form.category);
 			formData.append('fee', form.fee.toString());
 			formData.append('wa_number', form.wa_number);
-			formData.append('is_online', '1');
+			formData.append('is_online', '1'); // Default online
 
-			// Kirim foto hanya jika user memilih file baru
 			if (form.photo) {
 				formData.append('photo', form.photo);
 			}
 
 			if (isEditMode && form.id) {
-				// UPDATE (PUT via POST method spoofing)
-				formData.append('_method', 'PUT');
+				formData.append('_method', 'PUT'); // Method spoofing for Laravel
 				await fetchApi(`/experts/${form.id}`, 'POST', formData, true);
 				alert('Data berhasil diupdate!');
 			} else {
-				// CREATE (POST)
 				if (!form.photo) {
 					alert('Wajib upload foto untuk ahli baru!');
 					submitLoading = false;
@@ -91,7 +87,7 @@
 		}
 	}
 
-	// 4. DELETE: Hapus Data
+	// 4. DELETE
 	async function handleDelete(id: number, name: string) {
 		if (!confirm(`Hapus ahli "${name}"?`)) return;
 		try {
@@ -102,7 +98,7 @@
 		}
 	}
 
-	// --- Helper Modal ---
+	// Helper Modal
 	function openAddModal() {
 		isEditMode = false;
 		form = {
@@ -120,7 +116,6 @@
 
 	function openEditModal(item: any) {
 		isEditMode = true;
-		// Isi form dengan data yang mau diedit
 		form = {
 			id: item.id,
 			name: item.name,
@@ -128,8 +123,8 @@
 			category: item.category,
 			fee: item.fee,
 			wa_number: item.wa_number,
-			is_online: item.is_online, // Pastikan backend kirim field ini
-			photo: null // Reset foto (biar user upload baru kalau mau ganti)
+			is_online: item.is_online,
+			photo: null
 		};
 		showModal = true;
 	}
@@ -138,95 +133,131 @@
 		showModal = false;
 	}
 
+	// Helper Image URL (Sama kayak user app)
+	function resolveImage(url: string) {
+		if (!url) return null;
+		if (url.startsWith('http')) return url;
+		// Asumsi base URL localhost jika perlu, atau relative path
+		return `http://localhost:8000/storage/${url}`;
+	}
+
 	onMount(loadExperts);
 </script>
 
 <div class="space-y-6">
-	<div
-		class="flex flex-col items-start justify-between gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center"
-	>
+	<div class="flex items-center justify-between rounded-3xl border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50">
 		<div>
-			<h2 class="text-xl font-bold text-gray-800">Daftar Ahli Kesehatan</h2>
+			<h2 class="text-2xl font-bold text-gray-800">Daftar Ahli Kesehatan</h2>
 			<p class="text-sm text-gray-500">Kelola dokter, ahli gizi, dan psikolog.</p>
 		</div>
 		<button
 			on:click={openAddModal}
-			class="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-medium text-white shadow-md shadow-blue-200 transition-all hover:bg-blue-700"
+			class="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-bold text-white shadow-lg shadow-blue-200 transition hover:scale-105 hover:bg-blue-700"
 		>
-			<span>+</span> Tambah Ahli
+			<i class="fa-solid fa-plus"></i> Tambah Ahli
 		</button>
 	</div>
 
-	<div class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+	<div
+		class="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-xl shadow-slate-200/50"
+	>
 		{#if loading}
-			<div class="animate-pulse p-8 text-center text-gray-500">Memuat data ahli...</div>
+			<div class="py-20 text-center">
+				<div
+					class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-t-transparent"
+				></div>
+				<p class="mt-4 text-sm font-medium text-gray-500">Memuat data ahli...</p>
+			</div>
 		{:else if experts.length === 0}
-			<div class="flex flex-col items-center p-10 text-center">
-				<div class="mb-2 text-4xl">👨‍⚕️</div>
-				<h3 class="text-lg font-medium text-gray-900">Belum ada data</h3>
-				<p class="text-sm text-gray-500">Silakan tambahkan data baru.</p>
+			<div class="flex flex-col items-center p-16 text-center text-slate-400">
+				<i class="fa-solid fa-user-doctor mb-3 text-4xl text-slate-300"></i>
+				<h3 class="text-lg font-medium text-gray-600">Belum ada data</h3>
+				<p class="text-sm">Silakan tambahkan ahli kesehatan baru.</p>
 			</div>
 		{:else}
 			<div class="overflow-x-auto">
-				<table class="w-full border-collapse text-left">
-					<thead class="bg-gray-50 text-xs font-semibold tracking-wider text-gray-600 uppercase">
+				<table class="w-full text-left">
+					<thead
+						class="bg-slate-50/50 text-[10px] font-extrabold tracking-wider text-slate-400 uppercase"
+					>
 						<tr>
-							<th class="px-6 py-4">Profil</th>
-							<th class="px-6 py-4">Kategori</th>
-							<th class="px-6 py-4">Biaya</th>
-							<th class="px-6 py-4">Status</th>
-							<th class="px-6 py-4 text-right">Aksi</th>
+							<th class="px-8 py-4">Profil</th>
+							<th class="px-8 py-4">Kategori</th>
+							<th class="px-8 py-4">Biaya</th>
+							<th class="px-8 py-4">Status</th>
+							<th class="px-8 py-4 text-right">Aksi</th>
 						</tr>
 					</thead>
-					<tbody class="divide-y divide-gray-100">
+					<tbody class="divide-y divide-slate-50 bg-white text-sm font-medium">
 						{#each experts as item}
-							<tr class="transition-colors hover:bg-blue-50/50">
-								<td class="px-6 py-4">
-									<div class="flex items-center gap-3">
+							<tr class="transition hover:bg-slate-50/50">
+								<td class="px-8 py-5">
+									<div class="flex items-center gap-4">
 										<div
-											class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full border bg-gray-200"
+											class="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full border border-slate-100 bg-slate-50 shadow-sm"
 										>
-											{#if item.photo_url || item.photo}
+											{#if item.photo || item.photo_url}
 												<img
-													src={item.photo_url || item.photo}
+													src={resolveImage(item.photo_url || item.photo)}
 													alt={item.name}
 													class="h-full w-full object-cover"
 												/>
 											{:else}
-												<span
-													class="flex h-full w-full items-center justify-center text-xs text-gray-500"
-													>Img</span
-												>
+												<div class="flex h-full w-full items-center justify-center text-slate-300">
+													<i class="fa-solid fa-user text-lg"></i>
+												</div>
 											{/if}
 										</div>
 										<div>
-											<div class="font-medium text-gray-900">{item.name}</div>
-											<div class="text-xs text-blue-500">{item.title}</div>
+											<div class="font-bold text-slate-800">{item.name}</div>
+											<div class="text-xs font-bold tracking-wide text-blue-500 uppercase">
+												{item.title}
+											</div>
 										</div>
 									</div>
 								</td>
-								<td class="px-6 py-4 text-gray-600">{item.category}</td>
-								<td class="px-6 py-4 font-semibold text-green-600"
-									>Rp {parseInt(item.fee || 0).toLocaleString('id-ID')}</td
-								>
-								<td class="px-6 py-4">
+								<td class="px-8 py-5">
 									<span
-										class="rounded-full border border-green-200 bg-green-100 px-2 py-1 text-xs text-green-700"
+										class="inline-flex items-center rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600"
 									>
-										{item.is_online ? 'Online' : 'Offline'}
+										{item.category}
 									</span>
 								</td>
-								<td class="space-x-2 px-6 py-4 text-right">
-									<button
-										on:click={() => openEditModal(item)}
-										class="px-2 py-1 text-sm font-medium text-blue-500 hover:text-blue-700"
-										>Edit</button
-									>
-									<button
-										on:click={() => handleDelete(item.id, item.name)}
-										class="px-2 py-1 text-sm font-medium text-red-500 hover:text-red-700"
-										>Hapus</button
-									>
+								<td class="px-8 py-5 font-mono font-bold text-green-600">
+									Rp {parseInt(item.fee || 0).toLocaleString('id-ID')}
+								</td>
+								<td class="px-8 py-5">
+									{#if item.is_online}
+										<span
+											class="inline-flex items-center gap-1.5 rounded-full border border-green-200 bg-green-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-green-600 uppercase"
+										>
+											<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span> Online
+										</span>
+									{:else}
+										<span
+											class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-bold tracking-wide text-slate-500 uppercase"
+										>
+											Offline
+										</span>
+									{/if}
+								</td>
+								<td class="px-8 py-5 text-right">
+									<div class="flex justify-end gap-2">
+										<button
+											on:click={() => openEditModal(item)}
+											class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition hover:bg-blue-500 hover:text-white hover:shadow-md hover:shadow-blue-200"
+											title="Edit"
+										>
+											<i class="fa-solid fa-pen"></i>
+										</button>
+										<button
+											on:click={() => handleDelete(item.id, item.name)}
+											class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600 transition hover:bg-red-500 hover:text-white hover:shadow-md hover:shadow-red-200"
+											title="Hapus"
+										>
+											<i class="fa-solid fa-trash"></i>
+										</button>
+									</div>
 								</td>
 							</tr>
 						{/each}
@@ -242,100 +273,135 @@
 		class="fixed inset-0 z-50 flex items-center justify-center p-4"
 		transition:fade={{ duration: 200 }}
 	>
-		<div class="absolute inset-0 bg-black/40 backdrop-blur-sm" on:click={closeModal}></div>
+		<div class="absolute inset-0 bg-black/60 backdrop-blur-sm" on:click={closeModal}></div>
 		<div
-			class="z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+			class="relative z-10 w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl"
 			transition:fly={{ y: 20, duration: 300 }}
 		>
-			<div class="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-6 py-4">
-				<h3 class="text-lg font-bold text-gray-800">{isEditMode ? 'Edit Data' : 'Tambah Ahli'}</h3>
-				<button on:click={closeModal} class="text-xl text-gray-400">&times;</button>
+			<div
+				class="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-8 py-5"
+			>
+				<h3 class="text-lg font-extrabold text-slate-800">
+					{isEditMode ? 'Edit Expert' : 'Tambah Expert'}
+				</h3>
+				<button on:click={closeModal} class="text-slate-400 transition hover:text-red-500"
+					><i class="fa-solid fa-xmark text-xl"></i></button
+				>
 			</div>
-			<div class="overflow-y-auto p-6">
-				<form on:submit|preventDefault={handleSubmit} class="space-y-4">
-					<div
-						class="relative cursor-pointer rounded-xl border-2 border-dashed border-gray-300 p-4 text-center hover:bg-gray-50"
-					>
-						<input
-							type="file"
-							on:change={handleFileChange}
-							accept="image/*"
-							class="absolute inset-0 cursor-pointer opacity-0"
-						/>
-						{#if form.photo}
-							<p class="text-sm font-medium text-green-600">Foto terpilih: {form.photo.name}</p>
-						{:else}
-							<div class="text-gray-400">
-								<span class="mb-1 block text-2xl">📷</span>
-								<p class="text-sm">Klik untuk {isEditMode ? 'ganti' : 'upload'} foto</p>
+
+			<div class="max-h-[80vh] overflow-y-auto p-8">
+				<form on:submit|preventDefault={handleSubmit} class="space-y-5">
+					<div class="flex justify-center">
+						<div class="group relative cursor-pointer">
+							<input
+								type="file"
+								on:change={handleFileChange}
+								accept="image/*"
+								class="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+							/>
+							<div
+								class="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-2 border-dashed border-slate-300 bg-slate-50 transition group-hover:border-blue-400 group-hover:bg-blue-50"
+							>
+								{#if form.photo}
+									<div class="px-2 text-center text-xs font-bold text-blue-600">
+										{form.photo.name}
+									</div>
+								{:else}
+									<i class="fa-solid fa-camera text-2xl text-slate-300 group-hover:text-blue-400"
+									></i>
+								{/if}
 							</div>
-						{/if}
+							<div
+								class="mt-2 text-center text-xs font-bold tracking-wide text-slate-400 uppercase"
+							>
+								Foto Profil
+							</div>
+						</div>
 					</div>
 
-					<div class="grid grid-cols-2 gap-4">
+					<div class="grid grid-cols-2 gap-5">
 						<div class="col-span-2">
-							<label class="mb-1 block text-sm font-medium text-gray-700">Nama</label>
+							<label class="mb-1.5 block text-xs font-bold text-slate-500 uppercase"
+								>Nama Lengkap</label
+							>
 							<input
 								bind:value={form.name}
 								type="text"
-								class="w-full rounded-lg border border-gray-300 px-4 py-2"
+								class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium transition outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
 								required
+								placeholder="Dr. Fulan bin Fulan"
 							/>
 						</div>
+
 						<div>
-							<label class="mb-1 block text-sm font-medium text-gray-700">Gelar</label>
+							<label class="mb-1.5 block text-xs font-bold text-slate-500 uppercase">Gelar</label>
 							<input
 								bind:value={form.title}
 								type="text"
-								class="w-full rounded-lg border border-gray-300 px-4 py-2"
+								class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium transition outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
 								required
+								placeholder="Sp.JP"
 							/>
 						</div>
+
 						<div>
-							<label class="mb-1 block text-sm font-medium text-gray-700">Kategori</label>
+							<label class="mb-1.5 block text-xs font-bold text-slate-500 uppercase">Kategori</label
+							>
 							<select
 								bind:value={form.category}
-								class="w-full rounded-lg border border-gray-300 px-4 py-2"
+								class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium transition outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
 								required
 							>
+								<option value="" disabled>Pilih...</option>
 								<option value="Ahli Gizi">Ahli Gizi</option>
 								<option value="Dokter Umum">Dokter Umum</option>
 								<option value="Psikolog">Psikolog</option>
+								<option value="Fisio Teraphy">Fisio Teraphy</option>
+								<option value="Konsultan Holistic">Konsultan Holistic</option>
+								<option value="Konsultan Spiritual">Konsultan Spiritual</option>
 							</select>
 						</div>
-					</div>
-					<div class="grid grid-cols-2 gap-4">
+
 						<div>
-							<label class="mb-1 block text-sm font-medium text-gray-700">Biaya (Rp)</label>
+							<label class="mb-1.5 block text-xs font-bold text-slate-500 uppercase"
+								>Biaya (Rp)</label
+							>
 							<input
 								bind:value={form.fee}
 								type="number"
-								class="w-full rounded-lg border border-gray-300 px-4 py-2"
+								class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium transition outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
 								required
+								placeholder="50000"
 							/>
 						</div>
+
 						<div>
-							<label class="mb-1 block text-sm font-medium text-gray-700">No. WA (628...)</label>
+							<label class="mb-1.5 block text-xs font-bold text-slate-500 uppercase"
+								>WhatsApp (628...)</label
+							>
 							<input
 								bind:value={form.wa_number}
 								type="text"
-								class="w-full rounded-lg border border-gray-300 px-4 py-2"
+								class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium transition outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
 								required
+								placeholder="62812345678"
 							/>
 						</div>
 					</div>
-					<div class="flex justify-end gap-3 pt-4">
+
+					<div class="flex gap-3 pt-6">
 						<button
 							type="button"
 							on:click={closeModal}
-							class="rounded-xl px-5 py-2.5 text-gray-600 hover:bg-gray-100">Batal</button
+							class="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-200"
+							>Batal</button
 						>
 						<button
 							type="submit"
 							disabled={submitLoading}
-							class="rounded-xl bg-blue-600 px-5 py-2.5 text-white shadow-lg shadow-blue-200 hover:bg-blue-700"
+							class="flex-1 rounded-xl bg-blue-600 py-3 text-sm font-bold text-white shadow-lg shadow-blue-200 transition hover:bg-blue-700 disabled:opacity-70"
 						>
-							{submitLoading ? 'Menyimpan...' : 'Simpan'}
+							{submitLoading ? 'Menyimpan...' : 'Simpan Data'}
 						</button>
 					</div>
 				</form>

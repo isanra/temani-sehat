@@ -2,43 +2,84 @@
 	import { page } from '$app/stores';
 </script>
 
-<div class="flex h-screen bg-gray-50 font-sans">
-	<aside class="fixed inset-y-0 left-0 z-20 flex w-64 flex-col bg-white shadow-lg">
-		<div class="flex h-16 items-center justify-center border-b border-gray-100">
-			<h1 class="text-2xl font-bold text-blue-600">Temani Sehat</h1>
+<div class="flex h-screen bg-slate-50 font-sans text-slate-800">
+	<aside
+		class="fixed inset-y-0 left-0 z-30 flex w-64 flex-col border-r border-slate-100 bg-white shadow-xl shadow-slate-200/50"
+	>
+		<div class="flex h-20 items-center justify-center border-b border-slate-50">
+			<div class="flex items-center gap-2">
+				<div
+					class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 font-bold text-white"
+				>
+					TS
+				</div>
+				<h1
+					class="bg-gradient-to-r from-cyan-500 to-blue-600 bg-clip-text text-xl font-extrabold text-transparent"
+				>
+					Temani Sehat
+				</h1>
+			</div>
 		</div>
 
-		<nav class="flex-1 space-y-2 overflow-y-auto p-4">
-			{#each [{ name: 'Dashboard', href: '/admin', icon: '🏠' }, { name: 'Consultations', href: '/admin/consultations', icon: '🩺' }, { name: 'Experts', href: '/admin/experts', icon: '👨‍⚕️' }, { name: 'Products', href: '/admin/products', icon: '🍎' }, { name: 'Orders', href: '/admin/orders', icon: '📦' }, { name: 'Contents', href: '/admin/contents', icon: '📺' }] as item}
+		<nav class="flex-1 space-y-1 overflow-y-auto p-4">
+			<p class="mb-2 px-4 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+				Main Menu
+			</p>
+
+			{#each [{ name: 'Dashboard', href: '/admin', icon: 'fa-solid fa-house' }, { name: 'Konsultasi', href: '/admin/consultations', icon: 'fa-solid fa-user-doctor' }, { name: 'Experts', href: '/admin/experts', icon: 'fa-solid fa-users-viewfinder' }, { name: 'Produk', href: '/admin/products', icon: 'fa-solid fa-box-open' }, { name: 'Pesanan', href: '/admin/orders', icon: 'fa-solid fa-cart-shopping' }, { name: 'Konten', href: '/admin/contents', icon: 'fa-solid fa-newspaper' }] as item}
 				<a
 					href={item.href}
-					class="flex items-center gap-3 rounded-xl px-4 py-3 transition-all duration-200
-                   {$page.url.pathname === item.href
-						? 'bg-blue-500 text-white shadow-md shadow-blue-200'
-						: 'text-gray-600 hover:bg-blue-50 hover:text-blue-600'}"
+					class="group flex items-center gap-3 rounded-2xl px-4 py-3.5 text-sm font-bold transition-all duration-300
+                    {$page.url.pathname === item.href
+						? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-200'
+						: 'text-slate-500 hover:bg-slate-50 hover:text-cyan-600'}"
 				>
-					<span>{item.icon}</span>
-					<span class="font-medium">{item.name}</span>
+					<i
+						class="{item.icon} w-5 text-center {$page.url.pathname === item.href
+							? 'text-white'
+							: 'text-slate-400 group-hover:text-cyan-500'}"
+					></i>
+					<span>{item.name}</span>
 				</a>
 			{/each}
 		</nav>
+
+		<div class="border-t border-slate-50 p-4">
+			<div class="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+				<div
+					class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-400"
+				>
+					<i class="fa-solid fa-user"></i>
+				</div>
+				<div>
+					<p class="text-xs font-bold text-slate-700">Administrator</p>
+					<p class="text-[10px] text-slate-400">Super Admin</p>
+				</div>
+			</div>
+		</div>
 	</aside>
 
 	<div class="ml-64 flex flex-1 flex-col">
-		<main class="flex-1 overflow-y-auto bg-gray-50">
-			<header class="bg-gradient-to-r from-blue-500 to-blue-600 p-8 pb-20 text-white">
-				<div class="flex items-center justify-between">
+		<main class="scrollbar-hide flex-1 overflow-y-auto bg-slate-50">
+			<header
+				class="relative overflow-hidden rounded-bl-[3rem] bg-gradient-to-br from-cyan-500 via-blue-500 to-blue-700 p-10 pb-24 text-white shadow-xl shadow-cyan-900/10"
+			>
+				<div
+					class="absolute top-0 right-0 -mt-10 -mr-10 h-64 w-64 rounded-full bg-white/10 blur-3xl"
+				></div>
+				<div
+					class="absolute bottom-0 left-0 -mb-10 -ml-10 h-40 w-40 rounded-full bg-cyan-400/20 blur-2xl"
+				></div>
+
+				<div class="relative z-10 flex items-center justify-between">
 					<div>
-						<h2 class="text-3xl font-bold">Assalamualaikum, Admin</h2>
-						<p class="mt-1 opacity-90">Selamat datang di Panel Kontrol Temani Sehat.</p>
-					</div>
-					<div class="rounded-full bg-white/20 p-2">
-						<span class="text-2xl">TS</span>
+						<h2 class="text-3xl font-extrabold tracking-tight">Assalamualaikum, Admin 👋</h2>
+						<p class="mt-2 font-medium text-cyan-100">Panel Kontrol Utama Temani Sehat.</p>
 					</div>
 				</div>
 			</header>
 
-			<div class="-mt-16 px-8 pb-10">
+			<div class="relative z-20 -mt-16 px-10 pb-20">
 				<slot />
 			</div>
 		</main>
