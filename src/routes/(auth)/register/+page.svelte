@@ -100,7 +100,7 @@
 
             if (response.ok) {
                 alert('Registrasi Berhasil! Silakan Login.');
-                goto('{base}/login'); // PATH SUDAH DIPERBAIKI
+                goto('/login'); // PATH SUDAH DIPERBAIKI
             } else {
                 errorMessage = result.message || 'Registrasi gagal.';
             }
@@ -213,7 +213,7 @@
             </div>
 
             {#if currentStep === 1}
-                <p class="mt-6 text-center text-sm text-slate-500">Sudah punya akun? <a href="{base}/login" class="font-bold text-sky-600 hover:text-sky-500">Masuk</a></p>
+                <p class="mt-6 text-center text-sm text-slate-500">Sudah punya akun? <a href="/login" class="font-bold text-sky-600 hover:text-sky-500">Masuk</a></p>
             {/if}
         </div>
         <p class="relative z-10 mt-8 text-center text-xs font-medium text-white/80">&copy; 2026 Temani Sehat.</p>

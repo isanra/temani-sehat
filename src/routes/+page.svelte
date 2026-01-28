@@ -54,7 +54,7 @@
 						class="text-sm font-medium text-slate-500 transition-colors hover:text-sky-600">Paket</a
 					>
 					<a
-						href="{base}/login"
+						href="/login"
 						class="rounded-full bg-sky-500 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-sky-200 transition-all hover:bg-sky-600"
 					>
 						Log in
@@ -84,7 +84,7 @@
 				<a href="#fitur" class="font-medium text-slate-600" onclick={toggleMenu}>Fitur Utama</a>
 				<a href="#visi" class="font-medium text-slate-600" onclick={toggleMenu}>Visi Kami</a>
 				<a href="#harga" class="font-medium text-slate-600" onclick={toggleMenu}>Paket Harga</a>
-				<a href="{base}/login" class="font-bold text-sky-600" onclick={toggleMenu}>Masuk / Daftar</a>
+				<a href="/login" class="font-bold text-sky-600" onclick={toggleMenu}>Masuk / Daftar</a>
 			</div>
 		{/if}
 	</nav>

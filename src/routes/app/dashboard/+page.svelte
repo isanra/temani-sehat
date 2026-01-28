@@ -4,9 +4,6 @@
 	import { goto } from '$app/navigation';
 	import { userStore } from '$lib/stores/userStore.svelte.js';
 
-	// PERBAIKAN IMPORT: Mengambil dari folder 'utils' sesuai screenshot kamu
-	import { API_BASE } from '$lib/utils/api';
-
 	import Header from '$lib/components/Header.svelte';
 	import Navbar from '$lib/components/Navbar.svelte';
 	import Card from '$lib/components/ui/Card.svelte';

@@ -2,6 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { PUBLIC_API_URL } from '$env/static/public';
+	
 
 	// --- STATE ---
 	let email = $state('');
@@ -59,7 +60,7 @@
 				}
 
 				alert('Login Berhasil!');
-				goto('{base}/app/dashboard');
+				goto('/app/dashboard');
 			} else {
 				errorMessage = result.message || 'Email atau password salah.';
 			}
@@ -227,7 +228,7 @@
 
 			<p class="mt-8 text-center text-sm text-slate-500">
 				Belum punya akun? <a
-					href="{base}/register"
+					href="/register"
 					class="font-bold text-sky-600 transition-colors hover:text-sky-500">Daftar sekarang</a
 				>
 			</p>
