@@ -2,7 +2,6 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { PUBLIC_API_URL } from '$env/static/public';
-	
 
 	// --- STATE ---
 	let email = $state('');

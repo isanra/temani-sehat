@@ -1,20 +1,16 @@
 <script>
 	import { onMount } from 'svelte';
-	import { fade, slide, scale, fly } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
-
+	import { fade, slide, scale } from 'svelte/transition';
 	import Navbar from '$lib/components/Navbar.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
-	import Card from '$lib/components/ui/Card.svelte';
 
 	// --- CONFIG ---
-	const API_BASE = 'https://nondeprecatively-overdiligent-sonja.ngrok-free.dev/api';
+	// Ganti dengan nomor WhatsApp Admin (Format: 628...)
+	const ADMIN_WA = '6285171512508';
 
 	// --- STATE ---
-	let activeTab = $state('shop'); // 'shop' | 'orders'
+	let activeTab = $state('shop');
 	let products = $state([]);
-	let myOrders = $state([]);
-	let isLoading = $state(false);
 	let searchQuery = $state('');
 	let selectedCategory = $state('Semua');
 
@@ -23,10 +19,6 @@
 	let showCartModal = $state(false);
 	let cart = $state([]);
 	let shippingAddress = $state('');
-
-	// PAYMENT STATE
-	let selectedOrderToPay = $state(null);
-	let paymentFile = $state(null);
 
 	// KATEGORI
 	let categories = [
@@ -40,7 +32,7 @@
 		'Fitnes'
 	];
 
-	// --- DATA DUMMY (FALLBACK) ---
+	// --- DUMMY DATA (PASTI MUNCUL) ---
 	const dummyProducts = [
 		{
 			id: 1,
@@ -49,9 +41,7 @@
 			price: 50000,
 			rating: 4.8,
 			sold: 1200,
-			image_url:
-				'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&q=80&w=400',
-			description: 'Suplemen Vitamin C dosis tinggi.'
+			image_url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400'
 		},
 		{
 			id: 2,
@@ -61,19 +51,17 @@
 			rating: 4.9,
 			sold: 850,
 			image_url:
-				'https://images.unsplash.com/photo-1517427294546-5aa121f6cc90?auto=format&fit=crop&q=80&w=400',
-			description: 'Camilan sehat rendah kalori.'
+				'https://images.unsplash.com/photo-1724441980123-aca7911329d0?q=80&w=764&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
 		},
 		{
 			id: 3,
-			name: 'Omron Tensimeter',
+			name: 'Omron Tensimeter Digital',
 			category: 'Alkes',
 			price: 450000,
 			rating: 5.0,
 			sold: 300,
 			image_url:
-				'https://images.unsplash.com/photo-1631549916768-4119b2d3f9e2?auto=format&fit=crop&q=80&w=400',
-			description: 'Alat pengukur tekanan darah digital.'
+				'https://media.istockphoto.com/id/1454548593/photo/aneroid-manometer-and-rubber-bulb-of-the-mechanical-aneroid-sphygmomanometer.webp?a=1&b=1&s=612x612&w=0&k=20&c=idV-PceVlv0fhOtYw0V-BDA0KSlkp377ciU9hmHAOCo='
 		},
 		{
 			id: 4,
@@ -82,9 +70,7 @@
 			price: 3500000,
 			rating: 5.0,
 			sold: 45,
-			image_url:
-				'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?auto=format&fit=crop&q=80&w=400',
-			description: 'Penjernih udara HEPA Filter.'
+			image_url: 'https://images.unsplash.com/photo-1585776245991-cf89dd7fc73a?w=400'
 		},
 		{
 			id: 5,
@@ -93,9 +79,7 @@
 			price: 120000,
 			rating: 4.7,
 			sold: 2100,
-			image_url:
-				'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?auto=format&fit=crop&q=80&w=400',
-			description: 'Matras yoga nyaman.'
+			image_url: 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=400'
 		},
 		{
 			id: 6,
@@ -104,9 +88,7 @@
 			price: 150000,
 			rating: 4.6,
 			sold: 540,
-			image_url:
-				'https://images.unsplash.com/photo-1577803645773-f96470509666?auto=format&fit=crop&q=80&w=400',
-			description: 'Melindungi mata dari sinar biru.'
+			image_url: 'https://images.unsplash.com/photo-1577803645773-f96470509666?w=400'
 		}
 	];
 
@@ -114,101 +96,48 @@
 	let filteredProducts = $derived(
 		products.filter((p) => {
 			const matchCat = selectedCategory === 'Semua' || p.category === selectedCategory;
-			const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase());
+			const matchSearch = (p.name || '').toLowerCase().includes(searchQuery.toLowerCase());
 			return matchCat && matchSearch;
 		})
 	);
 
 	let cartTotal = $derived(
-		cart.reduce((total, item) => total + parsePrice(item.product.price) * item.quantity, 0)
+		cart.reduce((total, item) => total + item.product.price * item.quantity, 0)
 	);
 
 	// --- INIT ---
-	onMount(async () => {
-		await fetchProducts();
+	onMount(() => {
+		// Langsung pakai dummy data agar UI tampil sempurna
+		products = dummyProducts;
 	});
 
-	// --- API ACTIONS ---
-	async function fetchProducts() {
-		isLoading = true;
-		try {
-			const res = await fetch(`${API_BASE}/products`, {
-				headers: { 'ngrok-skip-browser-warning': 'true' }
-			});
-			const result = await res.json();
-			products = res.ok && result.data && result.data.length > 0 ? result.data : dummyProducts;
-		} catch (e) {
-			products = dummyProducts;
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	async function handleCheckout() {
+	// --- LOGIC CHECKOUT WA ---
+	function handleWhatsAppCheckout() {
 		if (cart.length === 0) return alert('Keranjang kosong!');
-		if (!shippingAddress) return alert('Alamat wajib diisi!');
+		if (!shippingAddress) return alert('Mohon isi alamat pengiriman dulu!');
 
-		try {
-			const res = await fetch(`${API_BASE}/checkout`, {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
-				body: JSON.stringify({
-					items: cart.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
-					shipping_address: shippingAddress
-				})
-			});
-			if (res.ok) {
-				alert('Pesanan berhasil dibuat!');
-				cart = [];
-				shippingAddress = '';
-				showCartModal = false;
-				activeTab = 'orders';
-				fetchOrders();
-			} else {
-				alert('Gagal checkout.');
-			}
-		} catch (e) {
-			alert('Error koneksi checkout');
-		}
-	}
+		// 1. Susun Pesan
+		let message = `Halo Admin Toko Sehat, saya mau pesan:\n\n`;
 
-	async function fetchOrders() {
-		isLoading = true;
-		try {
-			const res = await fetch(`${API_BASE}/my-orders`, {
-				headers: { 'ngrok-skip-browser-warning': 'true' }
-			});
-			const result = await res.json();
-			if (res.ok) myOrders = result.data || [];
-		} catch (e) {
-			console.error(e);
-		} finally {
-			isLoading = false;
-		}
-	}
+		cart.forEach((item, index) => {
+			const subtotal = formatRupiah(item.product.price * item.quantity);
+			message += `${index + 1}. ${item.product.name} (${item.quantity}x) - ${subtotal}\n`;
+		});
 
-	async function handleUploadPayment() {
-		if (!paymentFile || !selectedOrderToPay) return alert('Pilih file dulu!');
-		const formData = new FormData();
-		formData.append('payment_proof', paymentFile);
+		message += `\n*Total Bayar: ${formatRupiah(cartTotal)}*\n`;
+		message += `\n📍 *Alamat Pengiriman:*\n${shippingAddress}`;
+		message += `\n\nMohon diproses ya kak! Terima kasih.`;
 
-		try {
-			const res = await fetch(`${API_BASE}/orders/${selectedOrderToPay.id}/pay`, {
-				method: 'POST',
-				headers: { Accept: 'application/json' },
-				body: formData
-			});
-			if (res.ok) {
-				alert('Bukti bayar terkirim!');
-				selectedOrderToPay = null;
-				paymentFile = null;
-				fetchOrders();
-			} else {
-				alert('Gagal upload.');
-			}
-		} catch (e) {
-			alert('Error upload');
-		}
+		// 2. Encode URL & Buka WhatsApp
+		const encodedMessage = encodeURIComponent(message);
+		const waUrl = `https://wa.me/${ADMIN_WA}?text=${encodedMessage}`;
+
+		// Buka di tab baru
+		window.open(waUrl, '_blank');
+
+		// Opsional: Bersihkan keranjang setelah checkout
+		// cart = [];
+		// showCartModal = false;
 	}
 
 	// --- UI HELPERS ---
@@ -226,16 +155,6 @@
 			toast.classList.remove('translate-y-20', 'opacity-0');
 			setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 2000);
 		}
-	}
-
-	function switchTab(tab) {
-		activeTab = tab;
-		if (tab === 'orders') fetchOrders();
-	}
-
-	function parsePrice(price) {
-		if (typeof price === 'number') return price;
-		return parseInt(price.replace(/[^0-9]/g, '')) || 0;
 	}
 
 	function formatRupiah(num) {
@@ -296,183 +215,70 @@
 	</header>
 
 	<main class="relative z-20 mx-auto -mt-16 max-w-7xl px-4 md:px-8">
-		<div
-			class="mx-auto mb-8 flex max-w-sm rounded-full border border-white/50 bg-white/80 p-1.5 shadow-lg shadow-slate-200/50 backdrop-blur-md"
-		>
-			<button
-				onclick={() => switchTab('shop')}
-				class="flex-1 rounded-full py-2.5 text-sm font-bold transition-all duration-300 {activeTab ===
-				'shop'
-					? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md'
-					: 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}"
-			>
-				Belanja
-			</button>
-			<button
-				onclick={() => switchTab('orders')}
-				class="flex-1 rounded-full py-2.5 text-sm font-bold transition-all duration-300 {activeTab ===
-				'orders'
-					? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-md'
-					: 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'}"
-			>
-				Pesanan Saya
-			</button>
+		<div class="mb-8">
+			<div class="scrollbar-hide flex gap-3 overflow-x-auto px-1 py-4">
+				{#each categories as cat}
+					<button
+						onclick={() => (selectedCategory = cat)}
+						class="rounded-2xl border px-5 py-2.5 text-xs font-bold whitespace-nowrap shadow-sm transition-all {selectedCategory ===
+						cat
+							? 'scale-105 transform border-cyan-600 bg-cyan-600 text-white shadow-cyan-600'
+							: 'border-slate-100 bg-white text-slate-500 hover:border-cyan-200 hover:text-cyan-600'}"
+						>{cat}</button
+					>
+				{/each}
+			</div>
 		</div>
 
-		{#if activeTab === 'shop'}
-			<div class="mb-8">
-				<div class="scrollbar-hide flex gap-3 overflow-x-auto px-1 py-4">
-					{#each categories as cat}
-						<button
-							onclick={() => (selectedCategory = cat)}
-							class="rounded-2xl border px-5 py-2.5 text-xs font-bold whitespace-nowrap shadow-sm transition-all
-                            {selectedCategory === cat
-								? 'scale-105 transform border-cyan-600 bg-cyan-600 text-white shadow-cyan-600'
-								: 'border-slate-100 bg-white text-slate-500 hover:border-cyan-200 hover:text-cyan-600'}"
-						>
-							{cat}
-						</button>
-					{/each}
+		{#if filteredProducts.length === 0}
+			<div class="py-20 text-center">
+				<div class="mb-3 inline-block rounded-full bg-slate-100 p-4">
+					<i class="fa-solid fa-box-open text-3xl text-slate-300"></i>
 				</div>
+				<p class="font-medium text-slate-500">Produk tidak ditemukan</p>
 			</div>
-
-			{#if isLoading}
-				<div class="animate-pulse py-20 text-center font-medium text-slate-400">
-					Sedang memuat produk terbaik...
-				</div>
-			{:else if filteredProducts.length === 0}
-				<div class="py-20 text-center">
-					<div class="mb-3 inline-block rounded-full bg-slate-100 p-4">
-						<i class="fa-solid fa-box-open text-3xl text-slate-300"></i>
-					</div>
-					<p class="font-medium text-slate-500">Produk tidak ditemukan</p>
-				</div>
-			{:else}
-				<div class="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-6 lg:grid-cols-4 xl:grid-cols-5">
-					{#each filteredProducts as product}
-						<button
-							onclick={() => (selectedProduct = product)}
-							class="group relative flex flex-col overflow-hidden rounded-3xl border border-white bg-white text-left shadow-lg shadow-slate-100 transition-all hover:-translate-y-2 hover:shadow-xl hover:shadow-cyan-100"
-						>
-							<div class="relative aspect-square w-full overflow-hidden bg-slate-100">
-								<img
-									src={product.image_url}
-									alt={product.name}
-									class="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
-									loading="lazy"
-								/>
-								<div
-									class="absolute bottom-2 left-2 flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1 text-[10px] font-extrabold text-slate-800 shadow-sm backdrop-blur-md"
-								>
-									<i class="fa-solid fa-star text-orange-400"></i>
-									{product.rating}
-								</div>
-							</div>
-							<div class="flex flex-1 flex-col p-4">
-								<span
-									class="mb-1 w-fit rounded bg-cyan-50 px-2 py-0.5 text-[9px] font-bold tracking-wider text-cyan-600 uppercase"
-									>{product.category}</span
-								>
-								<h3
-									class="mb-2 line-clamp-2 text-sm leading-relaxed font-bold text-slate-800 transition-colors group-hover:text-cyan-600"
-								>
-									{product.name}
-								</h3>
-								<div class="mt-auto flex items-center justify-between pt-2">
-									<p class="text-base font-extrabold text-slate-800">
-										{formatRupiah(product.price)}
-									</p>
-									<div
-										class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition-all group-hover:bg-cyan-500 group-hover:text-white"
-									>
-										<i class="fa-solid fa-plus text-xs"></i>
-									</div>
-								</div>
-							</div>
-						</button>
-					{/each}
-				</div>
-			{/if}
-		{/if}
-
-		{#if activeTab === 'orders'}
-			<div class="mx-auto max-w-3xl space-y-4">
-				{#if isLoading}
-					<div class="py-10 text-center text-slate-400">Memuat pesanan...</div>
-				{:else if myOrders.length === 0}
-					<div
-						class="rounded-3xl border-2 border-dashed border-slate-200 bg-white py-20 text-center"
+		{:else}
+			<div class="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-6 lg:grid-cols-4 xl:grid-cols-5">
+				{#each filteredProducts as product}
+					<button
+						onclick={() => (selectedProduct = product)}
+						class="group relative flex flex-col overflow-hidden rounded-3xl border border-white bg-white text-left shadow-lg shadow-slate-100 transition-all hover:-translate-y-2 hover:shadow-xl hover:shadow-cyan-100"
 					>
-						<i class="fa-solid fa-receipt mb-3 block text-4xl text-slate-200"></i>
-						<p class="font-medium text-slate-400">Belum ada pesanan</p>
-						<button
-							onclick={() => switchTab('shop')}
-							class="mt-4 text-sm font-bold text-cyan-600 hover:underline">Mulai Belanja</button
-						>
-					</div>
-				{:else}
-					{#each myOrders as order}
-						<div
-							class="rounded-3xl border border-slate-50 bg-white p-5 shadow-lg shadow-slate-100 transition hover:shadow-xl"
-						>
-							<div class="mb-4 flex items-start justify-between border-b border-slate-100 pb-3">
-								<div>
-									<span class="text-[10px] font-bold tracking-wider text-slate-400 uppercase"
-										>Order #{order.id}</span
-									>
-									<p class="text-xs font-medium text-slate-500">
-										{new Date(order.created_at).toLocaleDateString()}
-									</p>
-								</div>
-								<span
-									class="rounded-full px-3 py-1 text-[10px] font-bold tracking-wide uppercase
-                                    {order.status === 'paid'
-										? 'bg-green-100 text-green-700'
-										: 'bg-orange-100 text-orange-700'}"
-								>
-									{order.status === 'paid' ? 'Lunas' : 'Belum Bayar'}
-								</span>
-							</div>
-
-							<div class="mb-4 space-y-3">
-								{#each order.items || [] as item}
-									<div class="flex items-center justify-between text-sm">
-										<div class="flex items-center gap-3">
-											<div
-												class="flex h-8 w-8 items-center justify-center rounded bg-slate-100 text-xs text-slate-400"
-											>
-												<i class="fa-solid fa-image"></i>
-											</div>
-											<span class="font-medium text-slate-700"
-												>{item.product_name || 'Produk'}
-												<span class="text-xs text-slate-400">x{item.quantity}</span></span
-											>
-										</div>
-										<span class="font-bold text-slate-800"
-											>{formatRupiah(item.price * item.quantity)}</span
-										>
-									</div>
-								{/each}
-							</div>
-
-							<div class="flex items-center justify-between pt-2">
-								<div>
-									<p class="text-xs font-bold text-slate-400">Total Belanja</p>
-									<span class="text-lg font-extrabold text-cyan-600"
-										>{formatRupiah(order.total_price)}</span
-									>
-								</div>
-								{#if order.status !== 'paid'}
-									<button
-										onclick={() => (selectedOrderToPay = order)}
-										class="rounded-xl bg-slate-800 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-slate-300 transition hover:bg-slate-700"
-										>Bayar Sekarang</button
-									>
-								{/if}
+						<div class="relative aspect-square w-full overflow-hidden bg-slate-100">
+							<img
+								src={product.image_url}
+								alt={product.name}
+								class="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+								loading="lazy"
+							/>
+							<div
+								class="absolute bottom-2 left-2 flex items-center gap-1 rounded-lg bg-white/90 px-2 py-1 text-[10px] font-extrabold text-slate-800 shadow-sm backdrop-blur-md"
+							>
+								<i class="fa-solid fa-star text-orange-400"></i>
+								{product.rating}
 							</div>
 						</div>
-					{/each}
-				{/if}
+						<div class="flex flex-1 flex-col p-4">
+							<span
+								class="mb-1 w-fit rounded bg-cyan-50 px-2 py-0.5 text-[9px] font-bold tracking-wider text-cyan-600 uppercase"
+								>{product.category}</span
+							>
+							<h3
+								class="mb-2 line-clamp-2 text-sm leading-relaxed font-bold text-slate-800 transition-colors group-hover:text-cyan-600"
+							>
+								{product.name}
+							</h3>
+							<div class="mt-auto flex items-center justify-between pt-2">
+								<p class="text-base font-extrabold text-slate-800">{formatRupiah(product.price)}</p>
+								<div
+									class="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-400 transition-all group-hover:bg-cyan-500 group-hover:text-white"
+								>
+									<i class="fa-solid fa-plus text-xs"></i>
+								</div>
+							</div>
+						</div>
+					</button>
+				{/each}
 			</div>
 		{/if}
 	</main>
@@ -497,7 +303,6 @@
 			class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
 			onclick={() => (selectedProduct = null)}
 		></div>
-
 		<div
 			class="relative z-10 flex h-full w-full flex-col bg-white shadow-2xl md:h-auto md:max-h-[85vh] md:max-w-5xl md:flex-row md:overflow-hidden md:rounded-[2.5rem]"
 			in:scale={{ start: 0.95, duration: 300 }}
@@ -552,7 +357,8 @@
 						Tentang Produk
 					</h3>
 					<p class="text-sm leading-relaxed text-slate-600">
-						{selectedProduct.description || 'Deskripsi produk ini belum tersedia secara lengkap.'}
+						Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor
+						incididunt ut labore et dolore magna aliqua.
 					</p>
 				</div>
 
@@ -563,20 +369,12 @@
 							{formatRupiah(selectedProduct.price)}
 						</h3>
 					</div>
-					<div class="flex gap-3">
-						<Button
-							onclick={() => addToCart(selectedProduct)}
-							variant="outline"
-							className="flex-1 py-4 border-2 border-slate-200 text-slate-700 hover:border-slate-800 hover:text-slate-900 font-bold rounded-2xl"
-						>
-							+ Keranjang
-						</Button>
-						<Button
-							className="flex-[2] py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:shadow-lg hover:shadow-cyan-200 font-bold rounded-2xl"
-						>
-							Beli Sekarang
-						</Button>
-					</div>
+					<Button
+						onclick={() => addToCart(selectedProduct)}
+						className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:shadow-lg hover:shadow-cyan-200 font-bold rounded-2xl"
+					>
+						+ Masukkan Keranjang
+					</Button>
 				</div>
 			</div>
 		</div>
@@ -606,7 +404,6 @@
 					><i class="fa-solid fa-circle-xmark text-2xl"></i></button
 				>
 			</div>
-
 			<div class="mb-6 flex-1 space-y-4 overflow-y-auto pr-2">
 				{#if cart.length === 0}
 					<div class="flex flex-col items-center py-10 text-center">
@@ -648,7 +445,6 @@
 					{/each}
 				{/if}
 			</div>
-
 			<div class="space-y-5 border-t border-slate-100 pt-6">
 				<div>
 					<label
@@ -667,58 +463,11 @@
 					<span class="text-xl font-black text-slate-800">{formatRupiah(cartTotal)}</span>
 				</div>
 				<Button
-					onclick={handleCheckout}
-					className="w-full py-4 bg-slate-900 text-white shadow-xl shadow-slate-300 font-bold rounded-2xl hover:scale-[1.02] transition-transform"
-					>Checkout Sekarang</Button
+					onclick={handleWhatsAppCheckout}
+					className="w-full py-4 bg-green-500 text-white shadow-xl shadow-green-300 font-bold rounded-2xl hover:scale-[1.02] hover:bg-green-600 transition-all"
 				>
-			</div>
-		</div>
-	</div>
-{/if}
-
-{#if selectedOrderToPay}
-	<div class="fixed inset-0 z-[100] flex items-center justify-center p-6" transition:fade>
-		<div
-			class="absolute inset-0 bg-slate-900/70 backdrop-blur-sm"
-			onclick={() => (selectedOrderToPay = null)}
-		></div>
-		<div class="relative z-10 w-full max-w-sm rounded-[2rem] bg-white p-8 text-center shadow-2xl">
-			<h3 class="mb-1 text-xl font-extrabold text-slate-800">Upload Bukti Bayar</h3>
-			<p class="mb-6 text-xs font-bold tracking-wide text-slate-400 uppercase">
-				Order #{selectedOrderToPay.id}
-			</p>
-
-			<div
-				class="group relative mb-6 cursor-pointer rounded-3xl border-2 border-dashed border-slate-200 p-8 transition-all hover:border-cyan-400 hover:bg-slate-50"
-			>
-				<input
-					type="file"
-					class="absolute inset-0 z-10 cursor-pointer opacity-0"
-					onchange={(e) => (paymentFile = e.target.files[0])}
-				/>
-				<div class="flex flex-col items-center gap-3">
-					<div
-						class="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-50 transition-transform group-hover:scale-110"
-					>
-						<i class="fa-solid fa-cloud-arrow-up text-xl text-cyan-500"></i>
-					</div>
-					<span class="text-xs font-bold text-slate-500"
-						>{paymentFile ? paymentFile.name : 'Ketuk untuk upload foto'}</span
-					>
-				</div>
-			</div>
-
-			<div class="flex gap-3">
-				<Button
-					onclick={() => (selectedOrderToPay = null)}
-					variant="secondary"
-					className="flex-1 rounded-xl py-3 font-bold text-slate-500">Batal</Button
-				>
-				<Button
-					onclick={handleUploadPayment}
-					className="flex-[2] rounded-xl py-3 bg-green-500 text-white shadow-lg shadow-green-200 font-bold hover:bg-green-600"
-					>Kirim Bukti</Button
-				>
+					<i class="fa-brands fa-whatsapp mr-2 text-xl"></i> Checkout di WA
+				</Button>
 			</div>
 		</div>
 	</div>

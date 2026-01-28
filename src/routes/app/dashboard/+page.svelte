@@ -3,6 +3,7 @@
 	import { scale, fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { userStore } from '$lib/stores/userStore.svelte.js';
+	import { API_BASE_URL } from '$lib/utils/api';
 
 	import Header from '$lib/components/Header.svelte';
 	import Navbar from '$lib/components/Navbar.svelte';
@@ -13,10 +14,11 @@
 	let isLoading = $state(false);
 	let isLoaded = $state(false);
 
-	// --- STATE FITUR BARU ---
+	// --- STATE DATA ---
 	let wisdom = $state(null);
 	let isWisdomRevealed = $state(false);
-	let educationList = $state([]);
+	let allContents = $state([]);
+	let recommendations = $state([]);
 
 	let trackingData = $state({
 		mood_score: null,
@@ -27,7 +29,94 @@
 		notes: ''
 	});
 
-	// --- 1. LOGIKA HITUNG SKOR ---
+	const moodLabels = {
+		1: 'Hari ini berat banget ya?',
+		2: 'Lagi ngerasa nggak oke ya?',
+		3: 'Hari ini biasa aja?',
+		4: 'Kayaknya lagi happy nih?',
+		5: 'Wah, hari ini luar biasa ya!'
+	};
+
+	// --- DUMMY DATA UNTUK TESTING (FALLBACK) ---
+	const dummyWisdom = {
+		id: 99,
+		quote:
+			'Jangan menyerah saat doa-doamu belum terjawab. Jika kamu mampu bersabar, Allah mampu memberikan lebih dari apa yang kamu minta.',
+		author: 'Daily Reminder'
+	};
+
+	// Pura-pura user butuh rekomendasi soal makan dan ibadah
+	const dummyRecommendations = [{ category: 'Pola Makan' }, { category: 'Ibadah' }];
+
+	const dummyContents = [
+		{
+			id: 'd1',
+			title: '5 Makanan Sehat Pemicu Mood Bagus',
+			category: 'Pola Makan',
+			type: 'Artikel',
+			duration: 'Baca',
+			image: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=400'
+		},
+		{
+			id: 'd2',
+			title: 'Panduan Sholat Khusyuk untuk Ketenangan',
+			category: 'Ibadah',
+			type: 'Video',
+			duration: '10 Min',
+			image: 'https://images.unsplash.com/photo-1685186113147-715dec63002e?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
+		},
+		{
+			id: 'd3',
+			title: 'Olahraga Ringan di Rumah 15 Menit',
+			category: 'Aktivitas Fisik',
+			type: 'Video',
+			duration: '15 Min',
+			image:
+				'https://plus.unsplash.com/premium_photo-1682088265889-8ab7586a0d18?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
+		},
+		{
+			id: 'd4',
+			title: 'Mengapa Minum Obat Itu Penting?',
+			category: 'Minum Obat',
+			type: 'Artikel',
+			duration: 'Baca',
+			image: null
+		},
+		{
+			id: 'd5',
+			title: 'Teknik Pernapasan saat Cemas',
+			category: 'Motivasi',
+			type: 'Video',
+			duration: '5 Min',
+			image: null
+		}
+	];
+
+	// --- 1. LOGIKA FILTER EDUKASI BERDASARKAN REKOMENDASI ---
+	let educationList = $derived.by(() => {
+		// Gunakan dummy jika allContents kosong (belum keload/error API)
+		const sourceContents = allContents.length > 0 ? allContents : dummyContents;
+
+		if (!isSubmitted) {
+			// Belum submit, tampilkan 3 konten random/teratas dari sumber
+			return sourceContents.slice(0, 3);
+		}
+
+		// Gunakan dummy rekomendasi jika recommendations kosong setelah submit (error API)
+		const sourceRecommendations =
+			recommendations.length > 0 ? recommendations : dummyRecommendations;
+
+		// Ambil kategori unik dari rekomendasi
+		const recoCategories = sourceRecommendations.map((r) => r.category);
+
+		// Filter konten yang cocok
+		const filtered = sourceContents.filter((content) => recoCategories.includes(content.category));
+
+		// Jika ada hasil filter, pakai itu. Jika tidak, fallback ke 3 konten teratas.
+		return filtered.length > 0 ? filtered.slice(0, 3) : sourceContents.slice(0, 3);
+	});
+
+	// --- 2. LOGIKA HITUNG SKOR ---
 	let dailyScore = $derived.by(() => {
 		let score = 0;
 		if (trackingData.medication_taken) score += 20;
@@ -38,7 +127,7 @@
 		return Math.min(100, score);
 	});
 
-	// --- 2. AUTO-SAVE SYSTEM ---
+	// --- 3. AUTO-SAVE & RESTORE ---
 	function getStorageKey() {
 		const storedUser = localStorage.getItem('user_data');
 		let userId = 'guest';
@@ -67,9 +156,11 @@
 		saveDraft();
 	});
 
-	// --- 3. ON MOUNT (Load Data) ---
 	onMount(async () => {
-		// Restore Draft
+		// A. Load Konten Dasar Dulu
+		await loadAllContents();
+
+		// B. Restore Session
 		const key = getStorageKey();
 		const savedRaw = localStorage.getItem(key);
 		const todayStr = new Date().toDateString();
@@ -81,6 +172,15 @@
 					trackingData = saved.data || trackingData;
 					isSubmitted = saved.isSubmitted || false;
 					userStore.updateScore(dailyScore);
+
+					// Jika user sudah submit sebelumnya, load data personalnya
+					if (isSubmitted) {
+						await loadRecommendations();
+						if (trackingData.mood_score) {
+							const moodStr = moodLabels[trackingData.mood_score];
+							await loadWisdom(moodStr);
+						}
+					}
 				} else {
 					localStorage.removeItem(key);
 					userStore.resetScore();
@@ -88,56 +188,92 @@
 			} catch (e) {}
 		}
 		isLoaded = true;
-
-		// LOAD DATA DARI API
-		await loadWisdom();
-		await loadEducations();
 	});
 
-	// --- FITUR: WISDOM ---
-	async function loadWisdom() {
+	// --- API CALLS DENGAN FALLBACK DUMMY ---
+
+	// 1. Get Wisdom
+	async function loadWisdom(moodString) {
 		try {
-			const res = await fetch(`${API_BASE}/wisdom`, {
+			const query = moodString ? `?mood=${encodeURIComponent(moodString)}` : '';
+			const res = await fetch(`${API_BASE}/wisdom${query}`, {
 				headers: { 'ngrok-skip-browser-warning': 'true' }
 			});
 			const result = await res.json();
 			if (res.ok && result.data) {
 				wisdom = result.data;
+			} else {
+				throw new Error('Data kosong');
 			}
 		} catch (e) {
-			console.error('Gagal load wisdom', e);
+			console.warn('Gagal load wisdom, pakai dummy.', e);
+			wisdom = dummyWisdom; // Fallback ke dummy
 		}
 	}
 
-	function revealWisdom() {
-		isWisdomRevealed = true;
-	}
-
-	// --- FITUR: EDUKASI (Link ke Detail) ---
-	async function loadEducations() {
+	// 2. Get All Contents
+	async function loadAllContents() {
 		try {
 			const res = await fetch(`${API_BASE}/contents`, {
 				headers: { 'ngrok-skip-browser-warning': 'true' }
 			});
 			const result = await res.json();
-			if (res.ok && result.data) {
-				// Ambil 3 konten teratas
-				educationList = result.data.slice(0, 3).map((item) => ({
-					...item,
-					icon: item.type === 'Video' ? '🎬' : '📖',
-					color:
-						item.category === 'Motivasi'
-							? 'bg-cyan-50 text-cyan-600'
-							: 'bg-orange-50 text-orange-600',
-					duration: item.duration || (item.type === 'Video' ? '5 Min' : 'Baca')
-				}));
+			if (res.ok && result.data && result.data.length > 0) {
+				allContents = result.data.map(mapContentData);
+			} else {
+				throw new Error('Data kosong');
 			}
 		} catch (e) {
-			console.error('Gagal load edukasi', e);
+			console.warn('Gagal load konten, pakai dummy.', e);
+			allContents = dummyContents.map(mapContentData); // Fallback ke dummy
 		}
 	}
 
+	// 3. Get Recommendations
+	async function loadRecommendations() {
+		const token = localStorage.getItem('auth_token');
+		if (!token) {
+			recommendations = dummyRecommendations;
+			return;
+		} // Pakai dummy kalau gak ada token
+
+		try {
+			const res = await fetch(`${API_BASE_URL}/recommendations/daily`, {
+				headers: { Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' }
+			});
+			const result = await res.json();
+			if (res.ok && result.data && result.data.length > 0) {
+				recommendations = result.data;
+			} else {
+				throw new Error('Data kosong');
+			}
+		} catch (e) {
+			console.warn('Gagal load rekomendasi, pakai dummy untuk filter.', e);
+			recommendations = dummyRecommendations; // Fallback ke dummy
+		}
+	}
+
+	// Helper Mapper untuk Konten (biar seragam antara API dan Dummy)
+	function mapContentData(item) {
+		return {
+			...item,
+			icon: item.type === 'Video' ? '🎬' : '📖',
+			color:
+				item.category === 'Motivasi'
+					? 'bg-cyan-50 text-cyan-600'
+					: item.category === 'Ibadah'
+						? 'bg-emerald-50 text-emerald-600'
+						: item.category === 'Pola Makan'
+							? 'bg-orange-50 text-orange-600'
+							: 'bg-blue-50 text-blue-600',
+			duration: item.duration || (item.type === 'Video' ? '5 Min' : 'Baca')
+		};
+	}
+
 	// --- UI ACTIONS ---
+	function revealWisdom() {
+		isWisdomRevealed = true;
+	}
 	function setMood(score) {
 		trackingData.mood_score = score;
 	}
@@ -150,47 +286,55 @@
 		isLoading = true;
 		const finalScore = dailyScore;
 		const token = localStorage.getItem('auth_token');
-
 		if (!token) {
 			goto('/login');
 			return;
 		}
 
-		const moodLabels = { 1: 'Sedih', 2: 'Buruk', 3: 'Netral', 4: 'Senang', 5: 'Luar Biasa' };
+		// ... (Logika submit sama seperti sebelumnya)
 		let physicalSymptomsList = [];
 		if (trackingData.medication_taken) physicalSymptomsList.push('Minum Obat');
 		if (trackingData.diet_complied) physicalSymptomsList.push('Jaga Pola Makan');
 		if (trackingData.prayer_completed) physicalSymptomsList.push('Ibadah Harian');
 		if (trackingData.exercise_done) physicalSymptomsList.push('Aktivitas Fisik');
+		const currentMoodStr = moodLabels[trackingData.mood_score];
 
 		const backendPayload = {
 			mood_score: trackingData.mood_score,
-			mood: moodLabels[trackingData.mood_score],
+			mood: currentMoodStr,
 			physical_symptoms: physicalSymptomsList,
 			score: finalScore,
 			notes: trackingData.notes
 		};
 
 		try {
-			const response = await fetch(`${API_BASE}/tracking`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${token}`,
-					'ngrok-skip-browser-warning': 'true'
-				},
-				body: JSON.stringify(backendPayload)
-			});
+			// UNTUK TESTING: KITA ANGGAP SUBMIT SELALU SUKSES MESKIPUN API MATI
+			// Biar bisa liat perubahan UI setelah submit pakai data dummy.
+			// Nanti kalau API sudah ready, uncomment fetch di bawah ini.
 
-			if (response.ok) {
-				isSubmitted = true;
-				userStore.updateScore(finalScore);
-				window.scrollTo({ top: 0, behavior: 'smooth' });
-			} else {
-				alert(`Gagal kirim laporan.`);
-			}
+			/* const response = await fetch(`${API_BASE}/tracking`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'ngrok-skip-browser-warning': 'true' },
+                body: JSON.stringify(backendPayload)
+            });
+            if (!response.ok) throw new Error("Gagal submit");
+            */
+
+			// Simulasi sukses submit
+			console.log('Simulasi Submit Sukses dengan payload:', backendPayload);
+			await new Promise((r) => setTimeout(r, 1000)); // Pura-pura loading 1 detik
+
+			isSubmitted = true;
+			userStore.updateScore(finalScore);
+
+			// Load Data Personal (akan pakai dummy jika API mati)
+			await loadRecommendations();
+			await loadWisdom(currentMoodStr);
+
+			window.scrollTo({ top: 0, behavior: 'smooth' });
 		} catch (error) {
-			alert('Gagal koneksi server.');
+			alert('Gagal mengirim laporan (API Error).');
+			console.error(error);
 		} finally {
 			isLoading = false;
 		}
@@ -216,6 +360,8 @@
 			title: 'Ibadah Harian',
 			sub: 'Sholat & Dzikir',
 			icon: '📿',
+			image:
+				'https://plus.unsplash.com/premium_photo-1682088265889-8ab7586a0d18?q=80&w=1170&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
 			color: 'bg-emerald-100 text-emerald-600'
 		},
 		{
@@ -260,15 +406,7 @@
 								class="animate-in fade-in mt-4 flex w-full flex-col items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 p-4"
 							>
 								<p class="text-sm font-bold text-slate-500">
-									{trackingData.mood_score === 1
-										? 'Hari Ini Berat banget ya? 😢'
-										: trackingData.mood_score === 2
-											? 'Kurang semangat? 😟'
-											: trackingData.mood_score === 3
-												? 'Biasa aja (Netral) 😐'
-												: trackingData.mood_score === 4
-													? 'Mood bagus! 🙂'
-													: 'Luar biasa! 😁'}
+									{moodLabels[trackingData.mood_score]}
 								</p>
 							</div>
 						{/if}
@@ -373,51 +511,17 @@
 				{/if}
 
 				<div class="border-t border-slate-100 pt-8">
-					<h3 class="mb-6 border-l-4 border-purple-400 pl-2 text-2xl font-bold text-slate-700">
-						Kartu Bijak Hari Ini
-					</h3>
-
-					<div
-						class="perspective-1000 group relative h-40 w-full cursor-pointer"
-						onclick={revealWisdom}
-					>
-						{#if !isWisdomRevealed}
-							<div
-								class="absolute inset-0 flex h-full w-full flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xl shadow-purple-200 transition-transform duration-500 hover:scale-[1.02] active:scale-95"
-							>
-								<i class="fa-solid fa-wand-magic-sparkles mb-2 animate-bounce text-4xl"></i>
-								<span class="font-bold tracking-wider">Tap untuk Buka</span>
-							</div>
-						{:else}
-							<div
-								in:scale
-								class="absolute inset-0 flex h-full w-full flex-col items-center justify-center rounded-3xl border border-purple-100 bg-white p-6 text-center shadow-md"
-							>
-								{#if wisdom}
-									<i class="fa-solid fa-quote-left absolute top-4 left-4 text-3xl text-purple-200"
-									></i>
-									<p class="relative z-10 text-lg leading-snug font-bold text-slate-700 italic">
-										"{wisdom.quote || wisdom.text || 'Kesabaran adalah kunci.'}"
-									</p>
-									<p class="mt-3 text-xs font-bold tracking-wider text-slate-400 uppercase">
-										— {wisdom.author || 'Anonim'}
-									</p>
-								{:else}
-									<p class="text-sm text-slate-400">Gagal memuat kata bijak.</p>
-								{/if}
-							</div>
-						{/if}
-					</div>
-				</div>
-
-				<div class="border-t border-slate-100 pt-8 pb-10">
 					<h3 class="mb-6 border-l-4 border-orange-400 pl-2 text-2xl font-bold text-slate-700">
-						Edukasi Hari Ini
+						{#if isSubmitted}
+							Saran Edukasi Untukmu
+						{:else}
+							Edukasi Terbaru
+						{/if}
 					</h3>
 
 					{#if educationList.length === 0}
 						<div class="animate-pulse py-10 text-center text-sm text-slate-400">
-							Memuat rekomendasi...
+							Memuat konten...
 						</div>
 					{:else}
 						<div class="scrollbar-hide -mx-6 flex gap-4 overflow-x-auto px-6 pb-4 md:mx-0 md:px-0">
@@ -449,6 +553,44 @@
 							{/each}
 						</div>
 					{/if}
+				</div>
+
+				<div class="border-t border-slate-100 pt-8 pb-10">
+					<h3 class="mb-6 border-l-4 border-purple-400 pl-2 text-2xl font-bold text-slate-700">
+						Kartu Bijak Hari Ini
+					</h3>
+
+					<div
+						class="perspective-1000 group relative h-40 w-full cursor-pointer"
+						onclick={revealWisdom}
+					>
+						{#if !isWisdomRevealed}
+							<div
+								class="absolute inset-0 flex h-full w-full flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xl shadow-purple-200 transition-transform duration-500 hover:scale-[1.02] active:scale-95"
+							>
+								<i class="fa-solid fa-wand-magic-sparkles mb-2 animate-bounce text-4xl"></i>
+								<span class="font-bold tracking-wider">Tap untuk Buka</span>
+							</div>
+						{:else}
+							<div
+								in:scale
+								class="absolute inset-0 flex h-full w-full flex-col items-center justify-center rounded-3xl border border-purple-100 bg-white p-6 text-center shadow-md"
+							>
+								{#if wisdom}
+									<i class="fa-solid fa-quote-left absolute top-4 left-4 text-3xl text-purple-200"
+									></i>
+									<p class="relative z-10 text-lg leading-snug font-bold text-slate-700 italic">
+										"{wisdom.quote || wisdom.text}"
+									</p>
+									<p class="mt-3 text-xs font-bold tracking-wider text-slate-400 uppercase">
+										— {wisdom.author}
+									</p>
+								{:else}
+									<p class="text-sm text-slate-400">Gagal memuat kata bijak.</p>
+								{/if}
+							</div>
+						{/if}
+					</div>
 				</div>
 			</div>
 		{/if}

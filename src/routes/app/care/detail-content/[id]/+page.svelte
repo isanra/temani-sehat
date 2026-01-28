@@ -18,7 +18,8 @@
 		title: 'Mengatasi Panic Attack dengan Teknik 5-4-3-2-1',
 		category: 'Motivasi',
 		type: 'Artikel',
-		image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800',
+		image:
+			'https://plus.unsplash.com/premium_photo-1697474429687-5fbfdd7622d3?q=80&w=1332&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
 		content: `
             <p class="mb-4">Panic attack atau serangan panik bisa datang kapan saja tanpa peringatan. Gejalanya bisa berupa jantung berdebar kencang, sesak napas, hingga perasaan takut yang luar biasa.</p>
             <p class="mb-6">Namun, ada teknik sederhana yang bisa kamu lakukan untuk meredakannya, yaitu teknik grounding <strong>5-4-3-2-1</strong>.</p>
@@ -91,18 +92,6 @@
 		>
 			<i class="fa-solid fa-arrow-left"></i>
 		</button>
-		<div class="flex gap-3">
-			<button
-				class="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/20 shadow-lg backdrop-blur-md transition hover:bg-white/30 hover:text-red-300"
-			>
-				<i class="fa-regular fa-heart"></i>
-			</button>
-			<button
-				class="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/20 shadow-lg backdrop-blur-md transition hover:bg-white/30"
-			>
-				<i class="fa-solid fa-share-nodes"></i>
-			</button>
-		</div>
 	</nav>
 
 	<main class="relative z-10 mx-auto max-w-3xl px-4 pt-24 pb-28">
@@ -203,7 +192,7 @@
 			in:fly={{ y: 50, duration: 500, delay: 300 }}
 			class="fixed bottom-0 z-40 w-full border-t border-slate-100 bg-white/80 p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] backdrop-blur-xl"
 		>
-			<div class="mx-auto flex max-w-3xl items-center gap-4">
+			<!-- <div class="mx-auto flex max-w-3xl items-center gap-4">
 				<div class="flex-1">
 					<p class="text-[10px] font-bold text-slate-400 uppercase">Sudah dibaca?</p>
 					<p class="text-xs font-bold text-slate-700">Tandai Selesai</p>
@@ -213,7 +202,7 @@
 				>
 					<i class="fa-solid fa-check-circle mr-2"></i> Selesai
 				</Button>
-			</div>
+			</div> -->
 		</div>
 	{/if}
 </div>

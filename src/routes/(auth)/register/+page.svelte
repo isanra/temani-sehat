@@ -1,6 +1,7 @@
 <script>
     import { goto } from '$app/navigation';
     import { fly } from 'svelte/transition';
+    import { API_BASE_URL } from '$lib/utils/api';
 
     // --- STATE ---
     let name = $state('');

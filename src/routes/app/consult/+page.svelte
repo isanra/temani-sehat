@@ -55,7 +55,7 @@
 		{ id: 'all', name: 'Semua', icon: 'fa-layer-group', color: 'bg-slate-200 text-slate-600' }, // Tambahan
 		{
 			id: 'khusus',
-			name: 'Konsultan Khusus',
+			name: 'holistik',
 			icon: 'fa-user-tie',
 			color: 'bg-purple-100 text-purple-600'
 		},
@@ -105,7 +105,7 @@
 				{ id: 2, name: 'Dr. Arief Sp.PD', role: 'Dokter', exp: '10 Tahun', isOnline: true },
 				{ id: 3, name: 'Siti Aminah S.Gz', role: 'Ahli Gizi', exp: '5 Tahun', isOnline: false },
 				{ id: 4, name: 'Budi Santoso', role: 'Fisio Teraphy', exp: '7 Tahun', isOnline: true },
-				{ id: 5, name: 'Prof. Bambang', role: 'Konsultan Khusus', exp: '20 Tahun', isOnline: true }
+				{ id: 5, name: 'Prof. Bambang', role: 'holistik', exp: '20 Tahun', isOnline: true }
 			];
 		}
 	}
@@ -117,7 +117,7 @@
 		if (s.includes('gizi')) return 'Ahli Gizi';
 		if (s.includes('fisio')) return 'Fisio Teraphy';
 		if (s.includes('admin')) return 'Admin';
-		if (s.includes('khusus') || s.includes('konsultan')) return 'Konsultan Khusus';
+		if (s.includes('khusus') || s.includes('konsultan')) return 'holistik';
 		return 'Dokter';
 	}
 
