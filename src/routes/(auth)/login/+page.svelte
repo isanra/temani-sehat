@@ -2,12 +2,11 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { PUBLIC_API_URL } from '$env/static/public';
-	
 
 	// --- STATE ---
 	let email = $state('');
 	let password = $state('');
-	let rememberMe = $state(false); // State untuk checkbox
+	let rememberMe = $state(false);
 
 	let showPassword = $state(false);
 	let isLoading = $state(false);
@@ -15,8 +14,22 @@
 
 	// --- LOGIC ---
 
-	// Cek "Ingatkan Saya" saat halaman dimuat
 	onMount(() => {
+		// 1. LOGIK BIAR GAK LOGIN LOGIN LAGI (Cek Token & Role)
+		const token = localStorage.getItem('auth_token');
+		const userRole = localStorage.getItem('user_role'); // Kita simpan role saat login nanti
+
+		if (token) {
+			// Jika token ada, langsung redirect sesuai role terakhir
+			if (userRole === 'admin') {
+				goto('/admin');
+			} else {
+				goto('/app/dashboard');
+			}
+			return; // Hentikan eksekusi biar form gak perlu dimuat
+		}
+
+		// 2. Cek "Ingatkan Saya" (Isi email otomatis)
 		const savedEmail = localStorage.getItem('saved_email');
 		if (savedEmail) {
 			email = savedEmail;
@@ -46,21 +59,34 @@
 			const result = await response.json();
 
 			if (response.ok) {
-				// 1. Simpan Token
+				// --- SIMPAN DATA PENTING ---
 				if (result.token || result.access_token) {
 					localStorage.setItem('auth_token', result.token || result.access_token);
 					if (result.user) localStorage.setItem('user_data', JSON.stringify(result.user));
 				}
 
-				// 2. Logic "Ingatkan Saya"
+				// --- LOGIKA PENENTUAN ADMIN VS USER ---
+				// Cek apakah emailnya khusus admin
+				const isAdmin = email === 'adminkuasa@temanisehat.com'; // Password divalidasi oleh Backend (response.ok)
+
+				// Simpan role di localStorage biar pas refresh/buka ulang browser tau dia siapa
+				localStorage.setItem('user_role', isAdmin ? 'admin' : 'user');
+
+				// --- LOGIKA REMEMBER ME (EMAIL) ---
 				if (rememberMe) {
 					localStorage.setItem('saved_email', email);
 				} else {
 					localStorage.removeItem('saved_email');
 				}
 
-				alert('Login Berhasil!');
-				goto('/app/dashboard');
+				// alert('Login Berhasil!'); // Opsional, bisa dihapus biar lebih cepat
+
+				// --- PENGARAHAN ROUTE ---
+				if (isAdmin) {
+					goto('/admin'); // Masuk ke dashboard Admin
+				} else {
+					goto('/app/dashboard'); // Masuk ke dashboard User biasa
+				}
 			} else {
 				errorMessage = result.message || 'Email atau password salah.';
 			}
@@ -143,18 +169,14 @@
 									fill="none"
 									viewBox="0 0 24 24"
 									stroke="currentColor"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-									/><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-									/></svg
 								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+									/>
+								</svg>
 							{:else}
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
@@ -162,13 +184,20 @@
 									fill="none"
 									viewBox="0 0 24 24"
 									stroke="currentColor"
-									><path
+								>
+									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										stroke-width="2"
-										d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-									/></svg
-								>
+										d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+									/>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+									/>
+								</svg>
 							{/if}
 						</button>
 					</div>
@@ -205,19 +234,21 @@
 								xmlns="http://www.w3.org/2000/svg"
 								fill="none"
 								viewBox="0 0 24 24"
-								><circle
+							>
+								<circle
 									class="opacity-25"
 									cx="12"
 									cy="12"
 									r="10"
 									stroke="currentColor"
 									stroke-width="4"
-								></circle><path
+								></circle>
+								<path
 									class="opacity-75"
 									fill="currentColor"
 									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								></path></svg
-							>
+								></path>
+							</svg>
 							Memproses...
 						</span>
 					{:else}
