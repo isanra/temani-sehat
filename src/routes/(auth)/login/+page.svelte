@@ -59,7 +59,7 @@
 				}
 
 				alert('Login Berhasil!');
-				goto('/app/dashboard');
+				goto('{base}/app/dashboard');
 			} else {
 				errorMessage = result.message || 'Email atau password salah.';
 			}
@@ -227,7 +227,7 @@
 
 			<p class="mt-8 text-center text-sm text-slate-500">
 				Belum punya akun? <a
-					href="/register"
+					href="{base}/register"
 					class="font-bold text-sky-600 transition-colors hover:text-sky-500">Daftar sekarang</a
 				>
 			</p>

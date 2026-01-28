@@ -4,17 +4,22 @@
 	import { goto } from '$app/navigation';
 	import { userStore } from '$lib/stores/userStore.svelte.js';
 
+	// PERBAIKAN IMPORT: Mengambil dari folder 'utils' sesuai screenshot kamu
+	import { API_BASE } from '$lib/utils/api';
+
 	import Header from '$lib/components/Header.svelte';
 	import Navbar from '$lib/components/Navbar.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
-	import Button from '$lib/components/ui/Button.svelte';
 
 	let activeTab = $state('home');
 	let isSubmitted = $state(false);
 	let isLoading = $state(false);
-
-	// Flag penanda apakah data sudah selesai dimuat dari penyimpanan
 	let isLoaded = $state(false);
+
+	// --- STATE FITUR BARU ---
+	let wisdom = $state(null);
+	let isWisdomRevealed = $state(false);
+	let educationList = $state([]);
 
 	let trackingData = $state({
 		mood_score: null,
@@ -28,20 +33,15 @@
 	// --- 1. LOGIKA HITUNG SKOR ---
 	let dailyScore = $derived.by(() => {
 		let score = 0;
-		// Checklist (4 x 20%)
 		if (trackingData.medication_taken) score += 20;
 		if (trackingData.prayer_completed) score += 20;
 		if (trackingData.diet_complied) score += 20;
 		if (trackingData.exercise_done) score += 20;
-		// Mood (Max 20%)
 		if (trackingData.mood_score) score += trackingData.mood_score * 4;
-
 		return Math.min(100, score);
 	});
 
-	// --- 2. SISTEM PENYIMPANAN OTOMATIS (AUTO-SAVE) ---
-
-	// Helper: Bikin Key Unik per User
+	// --- 2. AUTO-SAVE SYSTEM ---
 	function getStorageKey() {
 		const storedUser = localStorage.getItem('user_data');
 		let userId = 'guest';
@@ -53,31 +53,26 @@
 		return `tracking_draft_${userId}`;
 	}
 
-	// Fungsi Simpan ke LocalStorage
 	function saveDraft() {
-		if (!isLoaded) return; // Jangan simpan kalau belum selesai loading (biar gak numpuk data kosong)
-
+		if (!isLoaded) return;
 		const key = getStorageKey();
 		const payload = {
 			date: new Date().toDateString(),
-			data: trackingData, // Simpan isian form
-			isSubmitted: isSubmitted // Simpan status apakah sudah submit
+			data: trackingData,
+			isSubmitted: isSubmitted
 		};
 		localStorage.setItem(key, JSON.stringify(payload));
-
-		// Update Skor Header Real-time
 		userStore.updateScore(dailyScore);
 	}
 
-	// Trigger Auto-Save setiap ada perubahan data
 	$effect(() => {
-		// Kita "baca" dailyScore & isSubmitted biar effect jalan pas mereka berubah
 		const _trigger = dailyScore + isSubmitted;
 		saveDraft();
 	});
 
-	// --- 3. LOAD DATA SAAT REFRESH (RESTORE) ---
-	onMount(() => {
+	// --- 3. ON MOUNT (Load Data) ---
+	onMount(async () => {
+		// Restore Draft
 		const key = getStorageKey();
 		const savedRaw = localStorage.getItem(key);
 		const todayStr = new Date().toDateString();
@@ -85,50 +80,78 @@
 		if (savedRaw) {
 			try {
 				const saved = JSON.parse(savedRaw);
-
-				// Cek Tanggal (Hanya restore kalau data hari ini)
 				if (saved.date === todayStr) {
-					console.log('Restoring Draft...', saved);
-
-					// Kembalikan isian form
 					trackingData = saved.data || trackingData;
-					// Kembalikan status submit
 					isSubmitted = saved.isSubmitted || false;
-
-					// Paksa update skor header segera
 					userStore.updateScore(dailyScore);
 				} else {
-					// Kalau beda hari, hapus draft lama
-					console.log('New Day, Resetting...');
 					localStorage.removeItem(key);
-					userStore.resetScore(); // Reset skor header 0%
+					userStore.resetScore();
 				}
-			} catch (e) {
-				console.error('Error loading draft', e);
-			}
+			} catch (e) {}
 		}
-
-		// Tandai loading selesai, sekarang boleh Auto-Save
 		isLoaded = true;
+
+		// LOAD DATA DARI API
+		await loadWisdom();
+		await loadEducations();
 	});
+
+	// --- FITUR: WISDOM ---
+	async function loadWisdom() {
+		try {
+			const res = await fetch(`${API_BASE}/wisdom`, {
+				headers: { 'ngrok-skip-browser-warning': 'true' }
+			});
+			const result = await res.json();
+			if (res.ok && result.data) {
+				wisdom = result.data;
+			}
+		} catch (e) {
+			console.error('Gagal load wisdom', e);
+		}
+	}
+
+	function revealWisdom() {
+		isWisdomRevealed = true;
+	}
+
+	// --- FITUR: EDUKASI (Link ke Detail) ---
+	async function loadEducations() {
+		try {
+			const res = await fetch(`${API_BASE}/contents`, {
+				headers: { 'ngrok-skip-browser-warning': 'true' }
+			});
+			const result = await res.json();
+			if (res.ok && result.data) {
+				// Ambil 3 konten teratas
+				educationList = result.data.slice(0, 3).map((item) => ({
+					...item,
+					icon: item.type === 'Video' ? '🎬' : '📖',
+					color:
+						item.category === 'Motivasi'
+							? 'bg-cyan-50 text-cyan-600'
+							: 'bg-orange-50 text-orange-600',
+					duration: item.duration || (item.type === 'Video' ? '5 Min' : 'Baca')
+				}));
+			}
+		} catch (e) {
+			console.error('Gagal load edukasi', e);
+		}
+	}
 
 	// --- UI ACTIONS ---
 	function setMood(score) {
 		trackingData.mood_score = score;
-		// (Auto-save akan jalan otomatis lewat $effect)
 	}
-
 	function toggleChecklist(key) {
 		trackingData[key] = !trackingData[key];
-		// (Auto-save akan jalan otomatis lewat $effect)
 	}
 
-	// Submit ke Backend
 	async function submitReport() {
 		if (!trackingData.mood_score) return alert('Pilih mood dulu ya!');
 		isLoading = true;
-
-		const finalScore = dailyScore; // Skor 0-100% (untuk UI Header & LocalStorage)
+		const finalScore = dailyScore;
 		const token = localStorage.getItem('auth_token');
 
 		if (!token) {
@@ -136,74 +159,46 @@
 			return;
 		}
 
-		// --- 1. MAPPING DATA (Agar sesuai permintaan Backend) ---
-
-		// A. Terjemahkan Score 1-5 jadi String Mood
-		const moodLabels = {
-			1: 'Sedih',
-			2: 'Buruk',
-			3: 'Netral',
-			4: 'Senang', // atau "Baik"
-			5: 'Luar Biasa' // atau "Senang Sekali"
-		};
-
-		// B. Kumpulkan Checklist yg TRUE ke dalam Array 'physical_symptoms'
-		// Karena BE minta 'physical_symptoms' isinya kegiatan fisik
+		const moodLabels = { 1: 'Sedih', 2: 'Buruk', 3: 'Netral', 4: 'Senang', 5: 'Luar Biasa' };
 		let physicalSymptomsList = [];
 		if (trackingData.medication_taken) physicalSymptomsList.push('Minum Obat');
 		if (trackingData.diet_complied) physicalSymptomsList.push('Jaga Pola Makan');
 		if (trackingData.prayer_completed) physicalSymptomsList.push('Ibadah Harian');
 		if (trackingData.exercise_done) physicalSymptomsList.push('Aktivitas Fisik');
 
-		// C. Siapkan Payload Final untuk Backend
 		const backendPayload = {
-			mood_score: trackingData.mood_score, // Angka 1-5
-			mood: moodLabels[trackingData.mood_score], // String: "Senang", "Sedih", dll
-			physical_symptoms: physicalSymptomsList, // Array: ["Minum Obat", "Ibadah Harian"]
-			score: finalScore, // (Opsional) Tetap kirim 0-100% jaga-jaga BE butuh statistik
+			mood_score: trackingData.mood_score,
+			mood: moodLabels[trackingData.mood_score],
+			physical_symptoms: physicalSymptomsList,
+			score: finalScore,
 			notes: trackingData.notes
 		};
 
-		console.log('Mengirim data ke BE:', backendPayload); // Cek console buat mastiin
-
 		try {
-			const response = await fetch('/api/tracking', {
+			const response = await fetch(`${API_BASE}/tracking`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
 					Authorization: `Bearer ${token}`,
 					'ngrok-skip-browser-warning': 'true'
 				},
-				// KIRIM PAYLOAD YANG SUDAH DI-MAPPING
 				body: JSON.stringify(backendPayload)
 			});
 
 			if (response.ok) {
 				isSubmitted = true;
-
-				// SIMPAN KE LOCALSTORAGE (Tetap simpan data mentah trackingData buat restore UI)
-				const dataToSave = {
-					date: new Date().toDateString(),
-					score: finalScore,
-					data: trackingData // Simpan format lama biar UI bisa restore checklistnya
-				};
-				localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(dataToSave));
-
 				userStore.updateScore(finalScore);
 				window.scrollTo({ top: 0, behavior: 'smooth' });
 			} else {
-				const res = await response.json();
-				alert(`Gagal: ${res.message}`);
+				alert(`Gagal kirim laporan.`);
 			}
 		} catch (error) {
-			console.error(error);
 			alert('Gagal koneksi server.');
 		} finally {
 			isLoading = false;
 		}
 	}
 
-	// Config & Data Static
 	let checklistConfig = [
 		{
 			key: 'medication_taken',
@@ -234,22 +229,6 @@
 			color: 'bg-blue-100 text-blue-600'
 		}
 	];
-	let educations = [
-		{
-			type: 'Video',
-			duration: '5 Min',
-			title: 'Mengatasi Panic Attack',
-			icon: '🎬',
-			color: 'bg-cyan-50 text-cyan-600'
-		},
-		{
-			type: 'Artikel',
-			duration: 'Baca',
-			title: 'Keajaiban Dzikir Pagi',
-			icon: '📖',
-			color: 'bg-orange-50 text-orange-600'
-		}
-	];
 </script>
 
 <div class="min-h-screen bg-slate-50 pb-32 font-sans text-slate-800">
@@ -265,7 +244,6 @@
 						<h3 class="text-xl font-bold text-slate-700 md:text-3xl">
 							Gimana perasaanmu hari ini?
 						</h3>
-
 						<div class="mt-2 flex gap-4">
 							{#each ['😭', '😟', '😐', '🙂', '😁'] as emoji, i}
 								{@const score = i + 1}
@@ -280,47 +258,21 @@
 								</button>
 							{/each}
 						</div>
-
 						{#if trackingData.mood_score}
 							<div
 								class="animate-in fade-in mt-4 flex w-full flex-col items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 p-4"
 							>
-								{#if trackingData.mood_score === 1}
-									<p class="text-sm font-bold text-slate-500">Hari Ini Berat banget ya? 😢</p>
-									<div
-										class="flex items-center gap-2 rounded-full bg-red-50 px-3 py-1 text-xs font-bold text-red-500"
-									>
-										<span> +4% Poin</span>
-									</div>
-								{:else if trackingData.mood_score === 2}
-									<p class="text-sm font-bold text-slate-500">Kurang semangat? 😟</p>
-									<div
-										class="flex items-center gap-2 rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-500"
-									>
-										<span> +8% Poin</span>
-									</div>
-								{:else if trackingData.mood_score === 3}
-									<p class="text-sm font-bold text-slate-600">Biasa aja (Netral) 😐</p>
-									<div
-										class="flex items-center gap-2 rounded-full bg-yellow-50 px-3 py-1 text-xs font-bold text-yellow-600"
-									>
-										<span>+12% Poin</span>
-									</div>
-								{:else if trackingData.mood_score === 4}
-									<p class="text-sm font-bold text-slate-700">Mood bagus! 🙂</p>
-									<div
-										class="flex items-center gap-2 rounded-full bg-cyan-100 px-3 py-1 text-xs font-bold text-cyan-600"
-									>
-										<span>🌟 +16% Poin</span>
-									</div>
-								{:else if trackingData.mood_score === 5}
-									<p class="text-sm font-bold text-slate-700">Luar biasa! 😁</p>
-									<div
-										class="flex items-center gap-2 rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-600"
-									>
-										<span>🚀 +20% Poin (Max)</span>
-									</div>
-								{/if}
+								<p class="text-sm font-bold text-slate-500">
+									{trackingData.mood_score === 1
+										? 'Hari Ini Berat banget ya? 😢'
+										: trackingData.mood_score === 2
+											? 'Kurang semangat? 😟'
+											: trackingData.mood_score === 3
+												? 'Biasa aja (Netral) 😐'
+												: trackingData.mood_score === 4
+													? 'Mood bagus! 🙂'
+													: 'Luar biasa! 😁'}
+								</p>
 							</div>
 						{/if}
 					</Card>
@@ -423,34 +375,86 @@
 					</div>
 				{/if}
 
+				<div class="border-t border-slate-100 pt-8">
+					<h3 class="mb-6 border-l-4 border-purple-400 pl-2 text-2xl font-bold text-slate-700">
+						Kartu Bijak Hari Ini
+					</h3>
+
+					<div
+						class="perspective-1000 group relative h-40 w-full cursor-pointer"
+						onclick={revealWisdom}
+					>
+						{#if !isWisdomRevealed}
+							<div
+								class="absolute inset-0 flex h-full w-full flex-col items-center justify-center rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-xl shadow-purple-200 transition-transform duration-500 hover:scale-[1.02] active:scale-95"
+							>
+								<i class="fa-solid fa-wand-magic-sparkles mb-2 animate-bounce text-4xl"></i>
+								<span class="font-bold tracking-wider">Tap untuk Buka</span>
+							</div>
+						{:else}
+							<div
+								in:scale
+								class="absolute inset-0 flex h-full w-full flex-col items-center justify-center rounded-3xl border border-purple-100 bg-white p-6 text-center shadow-md"
+							>
+								{#if wisdom}
+									<i class="fa-solid fa-quote-left absolute top-4 left-4 text-3xl text-purple-200"
+									></i>
+									<p class="relative z-10 text-lg leading-snug font-bold text-slate-700 italic">
+										"{wisdom.quote || wisdom.text || 'Kesabaran adalah kunci.'}"
+									</p>
+									<p class="mt-3 text-xs font-bold tracking-wider text-slate-400 uppercase">
+										— {wisdom.author || 'Anonim'}
+									</p>
+								{:else}
+									<p class="text-sm text-slate-400">Gagal memuat kata bijak.</p>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				</div>
+
 				<div class="border-t border-slate-100 pt-8 pb-10">
 					<h3 class="mb-6 border-l-4 border-orange-400 pl-2 text-2xl font-bold text-slate-700">
 						Edukasi Hari Ini
 					</h3>
-					<div class="scrollbar-hide -mx-6 flex gap-4 overflow-x-auto px-6 pb-4 md:mx-0 md:px-0">
-						{#each educations as edu}
-							<Card className="min-w-[280px] hover:shadow-md border-slate-100 cursor-pointer">
-								<div
-									class="mb-4 flex h-32 items-center justify-center rounded-2xl bg-slate-100 text-4xl"
+
+					{#if educationList.length === 0}
+						<div class="animate-pulse py-10 text-center text-sm text-slate-400">
+							Memuat rekomendasi...
+						</div>
+					{:else}
+						<div class="scrollbar-hide -mx-6 flex gap-4 overflow-x-auto px-6 pb-4 md:mx-0 md:px-0">
+							{#each educationList as edu}
+								<a
+									href="/app/care/detail-content/{edu.id}"
+									class="block transition-transform hover:-translate-y-1"
 								>
-									{edu.icon}
-								</div>
-								<span class="rounded-full px-3 py-1 text-xs font-bold {edu.color}"
-									>{edu.type} • {edu.duration}</span
-								>
-								<h4 class="mt-3 text-lg font-bold text-slate-700">{edu.title}</h4>
-							</Card>
-						{/each}
-					</div>
+									<Card
+										className="min-w-[280px] hover:shadow-md border-slate-100 cursor-pointer h-full"
+									>
+										<div
+											class="relative mb-4 flex h-32 items-center justify-center overflow-hidden rounded-2xl bg-slate-100 text-4xl"
+										>
+											{#if edu.image}
+												<img src={edu.image} alt={edu.title} class="h-full w-full object-cover" />
+											{:else}
+												{edu.icon}
+											{/if}
+										</div>
+										<span class="rounded-full px-3 py-1 text-xs font-bold {edu.color}"
+											>{edu.type} • {edu.duration}</span
+										>
+										<h4 class="mt-3 line-clamp-2 text-lg leading-snug font-bold text-slate-700">
+											{edu.title}
+										</h4>
+									</Card>
+								</a>
+							{/each}
+						</div>
+					{/if}
 				</div>
 			</div>
 		{/if}
-		{#if activeTab === 'care'}<div in:fade class="pt-10 text-center text-slate-500">
-				Halaman Care
-			</div>{/if}
-		{#if activeTab === 'consult'}<div in:fade class="pt-10 text-center text-slate-500">
-				Halaman Konsultasi
-			</div>{/if}
 	</main>
 	<Navbar />
 </div>
