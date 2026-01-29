@@ -25,7 +25,14 @@
 		loading = true;
 		try {
 			const res = await fetchApi('/products');
-			products = Array.isArray(res) ? res : res?.data || [];
+			// Handle struktur response yang mungkin beda-beda
+			if (Array.isArray(res)) {
+				products = res;
+			} else if (res?.data && Array.isArray(res.data)) {
+				products = res.data;
+			} else {
+				products = [];
+			}
 		} catch (error) {
 			console.error('Gagal load produk:', error);
 			products = [];
@@ -40,7 +47,7 @@
 		if (file) form.image = file;
 	}
 
-	// 3. CREATE & UPDATE
+	// 3. CREATE & UPDATE (FIXED LOGIC)
 	async function handleSubmit() {
 		submitLoading = true;
 		try {
@@ -56,13 +63,13 @@
 			}
 
 			if (isEditMode && form.id) {
-				// UPDATE (Method Spoofing)
-				formData.append('_method', 'PUT');
-				// Note: Kalau backend kamu support PUT langsung, hapus _method dan ganti param fetchApi jadi 'PUT'
-				// Tapi form data biasanya butuh POST + _method di Laravel
+				// --- UPDATE LOGIC (FIXED) ---
+				// Karena backend error "PUT not supported", kita pakai POST murni ke /products/{id}
+				// Tanpa _method: PUT
 				await fetchApi(`/products/${form.id}`, 'POST', formData, true);
 				alert('Produk berhasil diperbarui!');
 			} else {
+				// --- CREATE LOGIC ---
 				if (!form.image) {
 					alert('Harap pilih gambar produk!');
 					submitLoading = false;
@@ -109,7 +116,7 @@
 			price: item.price,
 			stock: item.stock,
 			description: item.description,
-			image: null
+			image: null // Reset image input
 		};
 		showModal = true;
 	}
@@ -119,17 +126,33 @@
 	}
 
 	// Helper URL Image
+	// Sesuaikan BASE URL ini dengan alamat backend kamu
+	// Jika backend di ngrok, ganti localhost:8000 jadi alamat ngrok
+	const BACKEND_URL = 'http://localhost:8000';
+
 	function resolveImage(url: string) {
 		if (!url) return null;
 		if (url.startsWith('http')) return url;
-		return `http://localhost:8000/storage/${url}`;
+		// Hapus '/storage/' ganda jika ada
+		const cleanPath = url.replace(/^\/?storage\//, '');
+		return `${BACKEND_URL}/storage/${cleanPath}`;
 	}
 
 	onMount(loadProducts);
 </script>
 
+<svelte:head>
+	<title>Katalog Produk - Admin</title>
+	<link
+		rel="stylesheet"
+		href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+	/>
+</svelte:head>
+
 <div class="space-y-6">
-	<div class="flex items-center justify-between rounded-3xl border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50">
+	<div
+		class="flex items-center justify-between rounded-3xl border border-slate-100 bg-white p-6 shadow-xl shadow-slate-200/50"
+	>
 		<div>
 			<h2 class="text-2xl font-bold text-gray-800">Katalog Produk</h2>
 			<p class="text-sm text-gray-500">Kelola stok makanan sehat dan obat-obatan.</p>
@@ -260,9 +283,9 @@
 				<h3 class="text-lg font-extrabold text-slate-800">
 					{isEditMode ? 'Edit Produk' : 'Tambah Produk'}
 				</h3>
-				<button on:click={closeModal} class="text-slate-400 transition hover:text-red-500"
-					><i class="fa-solid fa-xmark text-xl"></i></button
-				>
+				<button on:click={closeModal} class="text-slate-400 transition hover:text-red-500">
+					<i class="fa-solid fa-xmark text-xl"></i>
+				</button>
 			</div>
 
 			<div class="max-h-[80vh] overflow-y-auto p-8">
@@ -281,7 +304,8 @@
 							{#if form.image}
 								<span class="text-sm font-bold text-blue-600">{form.image.name}</span>
 							{:else}
-								<span class="text-sm font-medium text-slate-500">Klik untuk upload foto produk</span
+								<span class="text-sm font-medium text-slate-500"
+									>Klik untuk {isEditMode ? 'ganti' : 'upload'} foto</span
 								>
 							{/if}
 						</div>
@@ -312,10 +336,9 @@
 								<option value="Makanan Sehat">Makanan Sehat</option>
 								<option value="Obat">Obat</option>
 								<option value="Alkes">Alkes</option>
-								<option value="COWAY">COWAY</option>
+								<option value="Minuman">Minuman</option>
+								<option value="Vitamin">Vitamin</option>
 								<option value="Perabot">Perabot</option>
-								<option value="Anti Radiasi">Anti Radiasi</option>
-								<option value="Fitnes">Fitnes</option>
 							</select>
 						</div>
 
