@@ -1,5 +1,27 @@
-<script>
+<script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { fetchApi } from '$lib/utils/api'; // Pastikan path utils benar
+
+	async function handleLogout() {
+		if (!confirm('Apakah Anda yakin ingin keluar?')) return;
+
+		try {
+			// Panggil API Logout (Method POST)
+			await fetchApi('/logout', 'POST');
+		} catch (error) {
+			console.error('Logout error (API):', error);
+			// Tetap lanjut logout di frontend walau API error (misal token udah expired duluan)
+		} finally {
+			// Bersihkan Data Lokal
+			localStorage.removeItem('auth_token');
+			localStorage.removeItem('user_data');
+			localStorage.removeItem('user_role');
+
+			// Redirect ke Login
+			goto('/login');
+		}
+	}
 </script>
 
 <div class="flex h-screen bg-slate-50 font-sans text-slate-800">
@@ -45,16 +67,28 @@
 		</nav>
 
 		<div class="border-t border-slate-50 p-4">
-			<div class="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
-				<div
-					class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-400"
+			<div
+				class="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3 shadow-sm"
+			>
+				<div class="flex items-center gap-3">
+					<div
+						class="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-slate-400"
+					>
+						<i class="fa-solid fa-user"></i>
+					</div>
+					<div>
+						<p class="text-xs font-bold text-slate-700">Administrator</p>
+						<p class="text-[10px] text-slate-400">Super Admin</p>
+					</div>
+				</div>
+
+				<button
+					on:click={handleLogout}
+					class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+					title="Keluar"
 				>
-					<i class="fa-solid fa-user"></i>
-				</div>
-				<div>
-					<p class="text-xs font-bold text-slate-700">Administrator</p>
-					<p class="text-[10px] text-slate-400">Super Admin</p>
-				</div>
+					<i class="fa-solid fa-arrow-right-from-bracket"></i>
+				</button>
 			</div>
 		</div>
 	</aside>
@@ -62,7 +96,7 @@
 	<div class="ml-64 flex flex-1 flex-col">
 		<main class="scrollbar-hide flex-1 overflow-y-auto bg-slate-50">
 			<header
-				class="relative overflow-hidden rounded-bl-[3rem] bg-gradient-to-br from-cyan-500 via-blue-500 to-blue-700 p-10 pb-24 text-white shadow-xl shadow-cyan-900/10"
+				class="relative z-10 overflow-hidden rounded-bl-[3rem] bg-gradient-to-br from-cyan-500 via-blue-500 to-blue-700 p-10 pb-24 text-white shadow-xl shadow-cyan-900/10"
 			>
 				<div
 					class="absolute top-0 right-0 -mt-10 -mr-10 h-64 w-64 rounded-full bg-white/10 blur-3xl"
