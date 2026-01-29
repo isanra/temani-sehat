@@ -5,10 +5,10 @@
 	import Button from '$lib/components/ui/Button.svelte';
 	import { API_BASE_URL } from '$lib/utils/api';
 
+	// --- CONFIG ---
 	const ADMIN_WA = '6285171512508';
 
 	// --- STATE ---
-	// activeTab dihapus karena sudah tidak pakai tab
 	let products = $state([]);
 	let isLoading = $state(false);
 	let searchQuery = $state('');
@@ -18,8 +18,6 @@
 	let showCartModal = $state(false);
 	let cart = $state([]);
 	let shippingAddress = $state('');
-	let selectedOrderToPay = $state(null);
-	let paymentFile = $state(null);
 
 	let categories = [
 		'Semua',
@@ -49,7 +47,7 @@
 		await fetchProducts();
 	});
 
-	// --- API ACTIONS ---
+	// --- API ACTIONS (HANYA ADA SATU FUNGSI INI) ---
 	async function fetchProducts() {
 		isLoading = true;
 		try {
@@ -66,8 +64,6 @@
 
 			if (res.ok) {
 				const result = await res.json();
-
-				// Logic "Sapu Jagat" (Cari array data)
 				if (Array.isArray(result)) {
 					products = result;
 				} else if (result.data && Array.isArray(result.data)) {
@@ -161,8 +157,8 @@
 		<div class="relative z-10 mx-auto max-w-7xl">
 			<div class="mb-6 flex items-center justify-between">
 				<div>
-					<p class="text-xs font-medium text-cyan-100 md:text-lg">Marketplace Sehat</p>
-					<h1 class="text-3xl font-extrabold tracking-tight text-white md:text-5xl">Toko Sehat</h1>
+					<p class="text-sm font-medium text-cyan-100">Marketplace Sehat</p>
+					<h1 class="text-3xl font-extrabold tracking-tight text-white">Toko Sehat</h1>
 				</div>
 				<button
 					onclick={() => (showCartModal = true)}
@@ -188,11 +184,11 @@
 					bind:value={searchQuery}
 					type="text"
 					placeholder="Cari suplemen, alkes, atau makanan..."
-					class="tra nsition-all w-full rounded-full bg-white/95 py-4 pr-4 pl-11 text-sm font-bold text-slate-700 shadow-lg shadow-blue-900/10 outline-none placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-cyan-500/30"
+					class="w-full rounded-2xl bg-white/95 py-4 pr-4 pl-11 text-sm font-bold text-slate-700 shadow-lg shadow-blue-900/10 transition-all outline-none placeholder:font-medium placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-cyan-500/30"
 				/>
 			</div>
 
-			<div class="scrollbar-hide -mx-6 flex gap-3 overflow-x-auto px-6 py-2">
+			<div class="scrollbar-hide -mx-6 flex gap-3 overflow-x-auto px-6 pb-2">
 				{#each categories as cat}
 					<button
 						onclick={() => (selectedCategory = cat)}
@@ -206,14 +202,14 @@
 		</div>
 	</header>
 
-	<main class="relative z-20 mx-auto -mt-10 max-w-7xl px-4 md:px-8">
+	<main class="relative z-20 mx-auto -mt-20 max-w-7xl px-4 md:px-8">
 		{#if isLoading}
 			<div class="animate-pulse py-20 text-center font-medium text-slate-400">
 				Sedang mengambil produk...
 			</div>
 		{:else if filteredProducts.length === 0}
 			<div class="py-20 text-center">
-				<div class="mb-3 inline-block rounded-full bg-cyan-600 p-4">
+				<div class="mb-3 inline-block rounded-full bg-slate-100 p-4">
 					<i class="fa-solid fa-box-open text-3xl text-slate-300"></i>
 				</div>
 				<p class="font-medium text-slate-500">Produk tidak ditemukan</p>

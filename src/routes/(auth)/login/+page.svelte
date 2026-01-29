@@ -17,19 +17,19 @@
 	onMount(() => {
 		// 1. LOGIK BIAR GAK LOGIN LOGIN LAGI (Cek Token & Role)
 		const token = localStorage.getItem('auth_token');
-		const userRole = localStorage.getItem('user_role'); // Kita simpan role saat login nanti
+		const userRole = localStorage.getItem('user_role');
 
 		if (token) {
-			// Jika token ada, langsung redirect sesuai role terakhir
+			// Redirect cerdas berdasarkan role
 			if (userRole === 'admin') {
 				goto('/admin');
 			} else {
 				goto('/app/dashboard');
 			}
-			return; // Hentikan eksekusi biar form gak perlu dimuat
+			return;
 		}
 
-		// 2. Cek "Ingatkan Saya" (Isi email otomatis)
+		// 2. Cek "Ingatkan Saya"
 		const savedEmail = localStorage.getItem('saved_email');
 		if (savedEmail) {
 			email = savedEmail;
@@ -50,8 +50,8 @@
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
-					'ngrok-skip-browser-warning': 'true',
-					'Access-Control-Allow-Origin': '*'
+					'ngrok-skip-browser-warning': 'true'
+					// HAPUS 'Access-Control-Allow-Origin' di sini, itu tugas Backend!
 				},
 				body: JSON.stringify({ email, password })
 			});
@@ -60,39 +60,43 @@
 
 			if (response.ok) {
 				// --- SIMPAN DATA PENTING ---
-				if (result.token || result.access_token) {
-					localStorage.setItem('auth_token', result.token || result.access_token);
-					if (result.user) localStorage.setItem('user_data', JSON.stringify(result.user));
+				const token = result.token || result.access_token;
+				if (token) {
+					localStorage.setItem('auth_token', token);
+					if (result.user) {
+						localStorage.setItem('user_data', JSON.stringify(result.user));
+					}
+				} else {
+					throw new Error('Token tidak ditemukan dalam respon server.');
 				}
 
-				// --- LOGIKA PENENTUAN ADMIN VS USER ---
-				// Cek apakah emailnya khusus admin
-				const isAdmin = email === 'adminkuasa@temanisehat.com'; // Password divalidasi oleh Backend (response.ok)
+				// --- LOGIKA ROLE ---
+				// Sebaiknya role juga dikembalikan dari backend (result.user.role)
+				// Tapi logika hardcode email ini sementara oke.
+				const isAdmin =
+					email === 'adminkuasa@temanisehat.com' || (result.user && result.user.role === 'admin');
 
-				// Simpan role di localStorage biar pas refresh/buka ulang browser tau dia siapa
 				localStorage.setItem('user_role', isAdmin ? 'admin' : 'user');
 
-				// --- LOGIKA REMEMBER ME (EMAIL) ---
+				// --- LOGIKA REMEMBER ME ---
 				if (rememberMe) {
 					localStorage.setItem('saved_email', email);
 				} else {
 					localStorage.removeItem('saved_email');
 				}
 
-				// alert('Login Berhasil!'); // Opsional, bisa dihapus biar lebih cepat
-
-				// --- PENGARAHAN ROUTE ---
+				// --- REDIRECT ---
 				if (isAdmin) {
-					goto('/admin'); // Masuk ke dashboard Admin
+					await goto('/admin'); // Pakai await biar transisi smooth
 				} else {
-					goto('/app/dashboard'); // Masuk ke dashboard User biasa
+					await goto('/app/dashboard');
 				}
 			} else {
 				errorMessage = result.message || 'Email atau password salah.';
 			}
 		} catch (error) {
 			console.error('Error:', error);
-			errorMessage = 'Gagal terhubung ke server.';
+			errorMessage = 'Gagal terhubung ke server. Cek koneksi internet.';
 		} finally {
 			isLoading = false;
 		}

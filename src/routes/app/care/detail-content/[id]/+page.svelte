@@ -2,69 +2,76 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { fade, slide, fly } from 'svelte/transition';
-	const API_BASE = 'https://nondeprecatively-overdiligent-sonja.ngrok-free.dev/api';
+	import { API_BASE_URL } from '$lib/utils/api';
 
 	import Button from '$lib/components/ui/Button.svelte';
 
-	// Ambil ID
-	let contentId = $page.params.id;
+	// 1. JADIKAN ID REAKTIF (Agar berubah saat URL berubah)
+	let contentId = $derived($page.params.id);
 
 	let content = $state(null);
 	let isLoading = $state(true);
 
-	// --- DUMMY DATA ---
-	const dummyDetail = {
-		id: 1,
-		title: 'Mengatasi Panic Attack dengan Teknik 5-4-3-2-1',
-		category: 'Motivasi',
-		type: 'Artikel',
-		image: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800',
-		content: `
-            <p class="mb-4">Panic attack atau serangan panik bisa datang kapan saja tanpa peringatan. Gejalanya bisa berupa jantung berdebar kencang, sesak napas, hingga perasaan takut yang luar biasa.</p>
-            <p class="mb-6">Namun, ada teknik sederhana yang bisa kamu lakukan untuk meredakannya, yaitu teknik grounding <strong>5-4-3-2-1</strong>.</p>
-            
-            <h3 class="text-lg font-bold text-slate-800 mb-3">Apa itu Teknik 5-4-3-2-1?</h3>
-            <p class="mb-4">Teknik ini bertujuan untuk mengalihkan fokus otak dari kecemasan ke lingkungan sekitar menggunakan panca indera. Caranya:</p>
-            
-            <ul class="space-y-2 mb-6 list-none pl-0">
-                <li class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span class="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 text-cyan-600 font-bold text-sm">5</span>
-                    <span>Benda yang bisa kamu <strong>lihat</strong>.</span>
-                </li>
-                <li class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span class="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 text-cyan-600 font-bold text-sm">4</span>
-                    <span>Benda yang bisa kamu <strong>sentuh</strong>.</span>
-                </li>
-                <li class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <span class="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 text-cyan-600 font-bold text-sm">3</span>
-                    <span>Suara yang bisa kamu <strong>dengar</strong>.</span>
-                </li>
-            </ul>
-            
-            <p>Lakukan perlahan sambil mengatur napas. Tarik napas dalam-dalam, tahan sejenak, lalu hembuskan perlahan. Kamu pasti bisa melaluinya!</p>
-        `,
-		created_at: '2026-01-27',
-		author: 'Dr. Sarah',
-		role: 'Psikiater'
-	};
-
-	onMount(async () => {
-		await loadContentDetail();
+	// 2. GUNAKAN $effect UNTUK MEMANTAU PERUBAHAN ID
+	$effect(() => {
+		if (contentId) {
+			loadContentDetail(contentId);
+		}
 	});
 
-	async function loadContentDetail() {
+	async function loadContentDetail(id) {
 		isLoading = true;
 		try {
-			const res = await fetch(`${API_BASE}/contents/${contentId}`, {
-				headers: { 'ngrok-skip-browser-warning': 'true' }
+			const token = localStorage.getItem('auth_token');
+			const res = await fetch(`${API_BASE_URL}/contents/${id}`, {
+				headers: {
+					Authorization: `Bearer ${token}`,
+					'ngrok-skip-browser-warning': 'true'
+				}
 			});
 			const result = await res.json();
-			content = res.ok && result.data ? result.data : dummyDetail;
+
+			if (res.ok && result.data) {
+				const d = result.data;
+				content = {
+					id: d.id,
+					title: d.title,
+					category: d.category || 'Umum',
+					type: d.type || 'Artikel',
+					image: resolveImage(d.thumbnail),
+					content: d.body || d.description || '<p>Tidak ada isi konten.</p>',
+					videoUrl: getYoutubeEmbed(d.url),
+					created_at: new Date(d.created_at).toLocaleDateString('id-ID', {
+						day: 'numeric',
+						month: 'long',
+						year: 'numeric'
+					}),
+					author: d.author || 'Tim Temani Sehat',
+					role: 'Official Creator'
+				};
+			} else {
+				content = null; // Jika data tidak ditemukan
+			}
 		} catch (e) {
-			content = dummyDetail;
+			console.error('Gagal load detail:', e);
+			content = null;
 		} finally {
 			isLoading = false;
 		}
+	}
+
+	function resolveImage(url) {
+		if (!url) return null;
+		if (url.startsWith('http')) return url;
+		const baseUrl = API_BASE_URL.replace('/api', '');
+		return `${baseUrl}/storage/${url}`;
+	}
+
+	function getYoutubeEmbed(url) {
+		if (!url) return null;
+		const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+		const match = url.match(regExp);
+		return match && match[2].length === 11 ? `https://www.youtube.com/embed/${match[2]}` : null;
 	}
 
 	function goBack() {
@@ -91,18 +98,6 @@
 		>
 			<i class="fa-solid fa-arrow-left"></i>
 		</button>
-		<div class="flex gap-3">
-			<button
-				class="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/20 shadow-lg backdrop-blur-md transition hover:bg-white/30 hover:text-red-300"
-			>
-				<i class="fa-regular fa-heart"></i>
-			</button>
-			<button
-				class="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/20 shadow-lg backdrop-blur-md transition hover:bg-white/30"
-			>
-				<i class="fa-solid fa-share-nodes"></i>
-			</button>
-		</div>
 	</nav>
 
 	<main class="relative z-10 mx-auto max-w-3xl px-4 pt-24 pb-28">
@@ -197,23 +192,4 @@
 			</div>
 		{/if}
 	</main>
-
-	{#if content}
-		<div
-			in:fly={{ y: 50, duration: 500, delay: 300 }}
-			class="fixed bottom-0 z-40 w-full border-t border-slate-100 bg-white/80 p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.05)] backdrop-blur-xl"
-		>
-			<div class="mx-auto flex max-w-3xl items-center gap-4">
-				<div class="flex-1">
-					<p class="text-[10px] font-bold text-slate-400 uppercase">Sudah dibaca?</p>
-					<p class="text-xs font-bold text-slate-700">Tandai Selesai</p>
-				</div>
-				<Button
-					className="rounded-2xl bg-slate-900 px-8 py-3 text-white shadow-lg shadow-slate-300 hover:scale-105 active:scale-95 transition-transform"
-				>
-					<i class="fa-solid fa-check-circle mr-2"></i> Selesai
-				</Button>
-			</div>
-		</div>
-	{/if}
 </div>
